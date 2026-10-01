@@ -3,7 +3,7 @@
 This project imports all accessible yearly Google spreadsheets whose titles match `Expenses YYYY` (for example, `Expenses 2025`), with one expense worksheet per month, into a durable SQLite database and builds a searchable dashboard.
 
 - `sync.py` reads every monthly worksheet through the Google Sheets API by default, imports transactions, and skips summary/formula rows that do not match the expense columns. If API access is unavailable, it attempts to download the whole spreadsheet as XLSX and parse all tabs (requires the spreadsheet to be publicly viewable).
-- `report.py` builds `dashboard.html` with monthly totals, Label and payment breakdowns, a searchable transaction list, and date/Label/payment/additional-label filters.
+- `report.py` builds `dashboard.html` with monthly totals, Label and payment breakdowns, a searchable transaction list with a month picker, and date/Label/payment/additional-label filters.
 - `serve.py` runs the dashboard locally with controls to add/remove additional labels on each transaction; changes are written to SQLite immediately.
 - `labels.py` attaches your own extra labels to transactions without changing the workbook’s existing Label values.
 
