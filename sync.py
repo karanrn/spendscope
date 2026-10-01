@@ -33,6 +33,21 @@ from pathlib import Path
 
 TOTAL_RE = re.compile(r"(?i)^(grand\s*|sub\s*)?totals?:?$")
 FIELDS = ["date", "amount", "category", "description", "payment", "subcategory"]
+FAILURE_COLUMNS = ["source", "reason", "date", "amount", "category", "description", "row"]
+
+
+class SheetRow(list):
+    """A spreadsheet row that remembers where it came from, for the failures log."""
+
+    def __init__(self, values=(), origin: str = ""):
+        super().__init__(values)
+        self.origin = origin
+
+
+def skipped_sheet(title: str, src: dict) -> bool:
+    """Summary tabs hold derived totals, not expenses."""
+    skip = src.get("skip_worksheets", ["Summary"])
+    return norm(title).lower() in {norm(s).lower() for s in skip}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS expenses (
@@ -102,18 +117,21 @@ def gsheet_csv_url(url: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{m.group(2)}/export?format=csv{gid_part}"
 
 
-def workbook_rows(content: bytes, name: str, file_sheet: str = "") -> tuple[list[list], str]:
+def workbook_rows(content: bytes, name: str, file_sheet: str = "",
+                  src: dict | None = None) -> tuple[list[list], str]:
     """Extract rows from one or all worksheets in an XLSX workbook."""
     try:
         import openpyxl
     except ImportError:
         sys.exit("pip install openpyxl   (needed to read .xlsx workbooks)")
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    worksheets = [wb[file_sheet]] if file_sheet else wb.worksheets
+    worksheets = ([wb[file_sheet]] if file_sheet else
+                  [ws for ws in wb.worksheets if not skipped_sheet(ws.title, src or {})])
     rows, names = [], []
     for ws in worksheets:
         names.append(ws.title)
-        rows.extend([list(r) for r in ws.iter_rows(values_only=True)])
+        rows.extend(SheetRow(r, f"{name}/{ws.title}:{i}")
+                    for i, r in enumerate(ws.iter_rows(values_only=True), 1))
         rows.append([])  # do not carry a blank date into the next month's sheet
     wb.close()
     return rows, f"{name}/" + ",".join(names)
@@ -137,7 +155,7 @@ def read_google_xlsx_fallback(
     with urllib.request.urlopen(req, timeout=60) as response:
         content = response.read()
     return workbook_rows(content, f"google-xlsx:{name or src.get('spreadsheet_title') or sheet_id}",
-                         src.get("worksheet", ""))
+                         src.get("worksheet", ""), src)
 
 
 def yearly_spreadsheets(gc, src: dict) -> list[dict[str, str]]:
@@ -167,13 +185,14 @@ def read_api_workbook(gc, spec: dict[str, str], src: dict) -> tuple[list[list], 
         spreadsheet = gc.open_by_key(spec["id"])
         year_match = re.search(r"(\d{4})$", spec["name"])
         workbook_year = int(year_match.group(1)) if year_match else None
-        worksheets = ([spreadsheet.worksheet(src["worksheet"])]
-                      if src.get("worksheet") else spreadsheet.worksheets())
+        worksheets = ([spreadsheet.worksheet(src["worksheet"])] if src.get("worksheet") else
+                      [ws for ws in spreadsheet.worksheets() if not skipped_sheet(ws.title, src)])
         rows = []
         names = []
         for ws in worksheets:
             names.append(ws.title)
-            sheet_rows = ws.get_all_values()
+            sheet_rows = [SheetRow(r, f"{spec['name']}/{ws.title}:{i}")
+                          for i, r in enumerate(ws.get_all_values(), 1)]
             if workbook_year:
                 add_year_to_short_dates(sheet_rows, workbook_year, src.get("date_column", "Date"))
             rows.extend(sheet_rows)
@@ -226,7 +245,8 @@ def read_rows(src: dict, columns: dict | None = None) -> tuple[list[list], str]:
         if text.lstrip().lower().startswith("<!doctype html") or "<html" in text[:500].lower():
             sys.exit("Google returned a sign-in page, so the sheet isn't public. "
                      "Share it as 'Anyone with the link can view', or use gsheet_api.")
-        return list(csv.reader(io.StringIO(text))), "gsheet:" + url
+        return ([SheetRow(r, f"gsheet:{i}") for i, r in enumerate(csv.reader(io.StringIO(text)), 1)],
+                "gsheet:" + url)
 
     if kind == "gsheet_api":
         if columns and columns.get("date"):
@@ -268,9 +288,9 @@ def read_rows(src: dict, columns: dict | None = None) -> tuple[list[list], str]:
     if kind == "file":
         p = Path(src["file_path"])
         if p.suffix.lower() in (".xlsx", ".xlsm"):
-            return workbook_rows(p.read_bytes(), f"file:{p.name}", src.get("file_sheet", ""))
+            return workbook_rows(p.read_bytes(), f"file:{p.name}", src.get("file_sheet", ""), src)
         with open(p, newline="", encoding="utf-8-sig") as f:
-            return list(csv.reader(f)), f"file:{p.name}"
+            return [SheetRow(r, f"{p.name}:{i}") for i, r in enumerate(csv.reader(f), 1)], f"file:{p.name}"
 
     sys.exit(f"Unknown source type: {kind}")
 
@@ -331,13 +351,14 @@ def find_headers(rows: list[list], date_col: str, amount_col: str) -> list[int]:
              "Fix the names under [columns] in config.toml.")
 
 
-def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int]:
+def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int, list[dict]]:
+    """Return (records, rows skipped, rows with content that failed to parse)."""
     cols, parsing = cfg["columns"], cfg.get("parsing", {})
     formats = parsing.get("date_formats", ["%d/%m/%Y", "%Y-%m-%d"])
     symbol = parsing.get("currency_symbol", "₹")
 
     headers = find_headers(rows, cols["date"], cols["amount"])
-    out, skipped = [], 0
+    out, skipped, failures = [], 0, []
     for section, h in enumerate(headers):
         end = headers[section + 1] if section + 1 < len(headers) else len(rows)
         header = [norm(c) for c in rows[h]]
@@ -353,22 +374,37 @@ def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int]:
 
         for row in rows[h + 1:end]:
             r = list(row) + [None] * max(0, len(header) - len(row))
-            if any(TOTAL_RE.match(norm(c)) for c in r if isinstance(c, str)):
+            get = lambda f: norm(r[idx[f]]) if f in idx else ""
+
+            def fail(reason: str) -> None:
+                failures.append({"source": getattr(row, "origin", ""), "reason": reason,
+                                 **{f: get(f) for f in ("date", "amount", "category", "description")},
+                                 "row": " | ".join(norm(c) for c in r)})
+
+            # Only the mapped columns count: side panels beside the expense list
+            # (e.g. "Total | 112916") share rows with real expenses.
+            mapped = [get(f) for f in idx]
+            if not any(mapped) or any(TOTAL_RE.match(c) for c in mapped):
                 skipped += 1
                 continue
             amt = parse_amount(r[idx["amount"]], symbol)
-            if amt is None or amt == 0:
+            if amt == 0 or (amt is None and not get("amount")
+                            and not (get("description") or get("category"))):
+                skipped += 1
+                continue
+            if amt is None:
+                fail("missing amount" if not get("amount") else "unparseable amount")
                 skipped += 1
                 continue
             d = parse_date(r[idx["date"]], formats)
             if d is None:
-                if last_date and not norm(r[idx["date"]]):
+                if last_date and not get("date"):
                     d = last_date
                 else:
+                    fail("missing date" if not get("date") else "unparseable date")
                     skipped += 1
                     continue
             last_date = d
-            get = lambda f: norm(r[idx[f]]) if f in idx else ""
             extra = {header[i]: norm(r[i]) for i in extra_idx if norm(r[i])}
             out.append({
                 "date": d.isoformat(),
@@ -390,13 +426,26 @@ def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int]:
                         ("date", "amount", "category", "subcategory", "description", "payment"))
         seen[base] += 1
         rec["row_key"] = hashlib.sha1(f"{base}#{seen[base]}".encode()).hexdigest()
-    return out, skipped
+    return out, skipped, failures
+
+
+def write_failures(path: Path, failures: list[dict]) -> None:
+    """Overwrite the failures log so it always reflects the latest sync."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FAILURE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(failures)
 
 
 # ----------------------------------------------------------------- storing
 def sync(cfg: dict, mirror: bool, dry_run: bool, full_rescan: bool = False) -> None:
     rows, source = read_rows(cfg["source"], cfg.get("columns"))
-    records, skipped = to_records(rows, cfg)
+    records, skipped, failures = to_records(rows, cfg)
+    failures_path = Path(cfg.get("parsing", {}).get("failures_log", "parse_failures.csv"))
+    write_failures(failures_path, failures)
+    if failures:
+        print(f"warning: {len(failures)} rows could not be parsed; see {failures_path}")
     db_path = Path(cfg["database"]["path"])
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -472,7 +521,7 @@ def main() -> None:
     cfg = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     # make relative paths in config relative to the config file
     base = cfg_path.resolve().parent
-    for sect, key in (("database", "path"), ("source", "file_path"),
+    for sect, key in (("database", "path"), ("source", "file_path"), ("parsing", "failures_log"),
                       ("source", "oauth_client_json"), ("source", "oauth_token_json")):
         if cfg.get(sect, {}).get(key) and not Path(cfg[sect][key]).is_absolute():
             cfg[sect][key] = str(base / cfg[sect][key])

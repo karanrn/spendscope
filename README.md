@@ -13,7 +13,7 @@ The expected transaction columns on each month sheet are:
 |---|---:|---|---|
 | 2025-01-02 | 450 | Coffee and sandwich | Food |
 
-Header unit suffixes such as `Expense(INR)` are accepted as `Expense`. Sheets API dates formatted as `M/D` without a year are interpreted as month/day and get the year from the parent `Expenses YYYY` spreadsheet. The workbook can also contain monthly summary formulas and a summary worksheet; those are ignored unless rows contain valid transaction data under the configured headers.
+Header unit suffixes such as `Expense(INR)` are accepted as `Expense`. Sheets API dates formatted as `M/D` without a year are interpreted as month/day and get the year from the parent `Expenses YYYY` spreadsheet. Worksheets named in `source.skip_worksheets` (default `Summary`) are not read. Side panels next to the expense columns (such as a monthly `Total` cell) are ignored, so the expense on the same row is still imported. Zero-amount rows are skipped. Rows that look like expenses but have an unreadable date or amount are written to `parse_failures.csv` (`parsing.failures_log`), which is overwritten on every sync.
 
 ## Setup
 

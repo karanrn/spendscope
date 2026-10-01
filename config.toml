@@ -17,6 +17,7 @@ sheet_id = "YOUR_SHEET_ID"    # set to bypass Drive discovery and read one workb
 spreadsheet_title = "Expenses 2025" # fallback title when no ID is set
 sheet_url = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit" # public XLSX fallback
 worksheet = ""                # empty = all monthly tabs in every yearly workbook
+skip_worksheets = ["Summary"] # tabs of derived totals, never imported
 
 # --- local file (a downloaded .xlsx or .csv), if desired ---
 file_path = "Expenses 2025.xlsx"
@@ -43,3 +44,6 @@ subcategory = ""
 date_formats = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%b-%Y", "%d %b %Y", "%m/%d/%Y"]
 # Rows whose amount can't be parsed (totals, blank lines, notes) are skipped.
 currency_symbol = "₹"
+# Rows with expense content that still fail to parse (bad date/amount) are
+# written here on every sync, overwriting the previous run's log.
+failures_log = "parse_failures.csv"

@@ -6,6 +6,7 @@ authorized_user.json
 # Local data, generated dashboard, and Python environment
 expenses.db*
 dashboard.html
+parse_failures.csv
 .venv/
 __pycache__/
 *.py[cod]
