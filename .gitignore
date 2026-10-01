@@ -1,0 +1,11 @@
+# OAuth credentials and cached user tokens
+service_account.json
+oauth_client.json
+authorized_user.json
+
+# Local data, generated dashboard, and Python environment
+expenses.db*
+dashboard.html
+.venv/
+__pycache__/
+*.py[cod]

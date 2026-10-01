@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------
+# Expense tracker config — edit this once, then just run sync.py
+# ---------------------------------------------------------------
+
+[source]
+# Google Sheets API is tried first; Drive API is required to discover yearly
+# spreadsheet titles. XLSX fallback requires public link access.
+type = "gsheet_api"
+
+# Download an OAuth Client ID JSON for a Desktop app from Google Cloud.
+# The first run opens a browser for your Google account; its refresh token is cached.
+oauth_client_json = "service_account.json"
+oauth_token_json = "authorized_user.json"
+spreadsheet_title_pattern = '^Expenses [0-9]{4}$' # requires Google Drive API
+folder_id = ""               # optional: restrict discovery to a Drive folder
+sheet_id = "YOUR_SHEET_ID"    # set to bypass Drive discovery and read one workbook
+spreadsheet_title = "Expenses 2025" # fallback title when no ID is set
+sheet_url = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit" # public XLSX fallback
+worksheet = ""                # empty = all monthly tabs in every yearly workbook
+
+# --- local file (a downloaded .xlsx or .csv), if desired ---
+file_path = "Expenses 2025.xlsx"
+file_sheet = ""               # .xlsx: empty = import all worksheets
+
+[database]
+path = "expenses.db"
+
+# Map YOUR column headers (left side stays fixed) to the fields the tool uses.
+# Header matching ignores case and surrounding spaces.
+# Only date and amount are required; set any other to "" if you don't have it.
+# Columns you don't map are still kept, in an "extra" JSON field.
+[columns]
+date        = "Date"
+amount      = "Expense"
+category    = "Label"
+description = "Item"
+payment     = ""
+subcategory = ""
+
+[parsing]
+# Order of date formats to try (Python strptime). Day-first formats come first
+# because that's the common Indian convention (01/10/2026 = 1 Oct).
+date_formats = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%b-%Y", "%d %b %Y", "%m/%d/%Y"]
+# Rows whose amount can't be parsed (totals, blank lines, notes) are skipped.
+currency_symbol = "₹"

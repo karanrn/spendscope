@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3f0;
+  --surface-1: #fcfcfb;
+  --border: #e3e2dd;
+  --grid: #ecebe7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --accent: #2a78d6;
+  --accent-soft: #e3eefb;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s-other: #a3a29c;
+  --prev: #a3a29c;
+  --up: #c4382f; --down: #1f7a3f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2b; --grid: #262624;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --accent: #3987e5; --accent-soft: #1d2d42;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s-other: #6b6a65; --prev: #6b6a65; --up: #ff8a80; --down: #6fcf8f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2b; --grid: #262624;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --accent: #3987e5; --accent-soft: #1d2d42;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #008300; --s7: #9085e9; --s-other: #6b6a65; --prev: #6b6a65; --up: #ff8a80; --down: #6fcf8f;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+.meta { color: var(--text-muted); font-size: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+.seg button { border: 0; background: none; color: var(--text-secondary); padding: 6px 12px; font: inherit; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--text-primary); font-weight: 600; }
+select, input[type="search"] {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chip[aria-pressed="false"] { opacity: .45; }
+.chip.clear { color: var(--accent); border-style: dashed; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.kpi .label { color: var(--text-secondary); font-size: 12px; }
+.kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; }
+.kpi .sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.up { color: var(--up); } .down { color: var(--down); }
+.grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
+.grid.even { grid-template-columns: 1fr 1fr; }
+.card h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+.card .hint { color: var(--text-muted); font-size: 12px; margin-bottom: 10px; }
+.chart { position: relative; height: 300px; }
+.chart.tall { height: 340px; }
+.table-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--text-secondary); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; }
+td.num, th.num { text-align: right; }
+td.desc { white-space: normal; color: var(--text-secondary); }
+.tscroll { overflow-x: auto; }
+.more { margin-top: 10px; }
+.more button { font: inherit; background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tag-pill { border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; background: var(--accent-soft); color: var(--text-primary); font: inherit; font-size: 12px; }
+button.tag-pill { cursor: pointer; }
+.tag-form { display: inline-flex; gap: 4px; margin: 2px 0; }
+.tag-form input { width: 100px; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); background: var(--surface-1); }
+.tag-form button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--accent); cursor: pointer; }
+.label-status { min-height: 18px; color: var(--text-muted); font-size: 12px; }
+.empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
+@media (max-width: 860px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .grid, .grid.even { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Expenses</h1>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <div class="filters">
+    <div class="seg" id="range">
+      <button data-r="3">3M</button><button data-r="6">6M</button><button data-r="12">12M</button>
+      <button data-r="ytd">YTD</button><button data-r="all">All</button>
+    </div>
+    <select id="from" aria-label="From month"></select>
+    <span class="meta">to</span>
+    <select id="to" aria-label="To month"></select>
+    <select id="pay" aria-label="Payment method"></select>
+    <select id="tag" aria-label="Additional label"></select>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <div class="kpis">
+    <div class="card kpi"><div class="label">Total spent</div><div class="value" id="k-total"></div><div class="sub" id="k-total-sub"></div></div>
+    <div class="card kpi"><div class="label">Average per month</div><div class="value" id="k-avg"></div><div class="sub" id="k-avg-sub"></div></div>
+    <div class="card kpi"><div class="label" id="k-mtd-label">This month</div><div class="value" id="k-mtd"></div><div class="sub" id="k-mtd-sub"></div></div>
+    <div class="card kpi"><div class="label">Biggest category</div><div class="value" id="k-top" style="font-size:20px;line-height:1.5"></div><div class="sub" id="k-top-sub"></div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Monthly spend by category</h2>
+      <div class="hint">Top 7 categories by all-time spend; the rest fold into Other</div>
+      <div class="chart tall"><canvas id="c-monthly"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>By category</h2>
+      <div class="hint">Click a bar to show only that category</div>
+      <div class="chart tall"><canvas id="c-cat"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid even">
+    <div class="card">
+      <h2 id="cum-title">Running total: this month vs last</h2>
+      <div class="hint">Cumulative spend by day of month</div>
+      <div class="chart"><canvas id="c-cum"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>By payment method</h2>
+      <div class="hint" id="pay-hint">Share of spend in the selected range</div>
+      <div class="chart"><canvas id="c-pay"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-head">
+      <h2 style="margin:0">Transactions</h2>
+      <input type="search" id="q" placeholder="Search Item, labels…" aria-label="Search transactions">
+    </div>
+    <div class="label-status" id="label-status" aria-live="polite"></div>
+    <div class="tscroll"><table>
+      <thead><tr>
+        <th data-k="0">Date</th><th data-k="2">Label</th><th data-k="4">Item</th>
+        <th data-k="5">Additional labels</th><th data-k="3">Payment</th><th class="num" data-k="1">Expense</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+    <div class="more" id="more"></div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const CUR = DATA.currency || "₹";
+const ROWS = DATA.rows.map(r => ({ d: r[0], m: r[0].slice(0, 7), a: r[1], c: r[2], p: r[3] || "—", desc: r[4], sub: r[5], tags: r[6] || [], id: r[7] }));
+const fmt = v => CUR + Math.round(v).toLocaleString("en-IN");
+const fmtShort = v => {
+  const a = Math.abs(v);
+  if (a >= 1e7) return CUR + (v / 1e7).toFixed(1).replace(/\.0$/, "") + "Cr";
+  if (a >= 1e5) return CUR + (v / 1e5).toFixed(1).replace(/\.0$/, "") + "L";
+  if (a >= 1e3) return CUR + (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+  return CUR + Math.round(v);
+};
+const monthName = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleString("en-IN", { month: "short", year: "2-digit" }); };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sum = arr => arr.reduce((s, r) => s + r.a, 0);
+const group = (arr, key) => { const g = new Map(); for (const r of arr) g.set(key(r), (g.get(key(r)) || 0) + r.a); return g; };
+
+// ---- months & stable category colors (color follows the category, never the filter)
+const allMonths = (() => {
+  if (!ROWS.length) return [];
+  const out = []; let [y, m] = ROWS[0].m.split("-").map(Number);
+  const [ey, em] = ROWS[ROWS.length - 1].m.split("-").map(Number);
+  while (y < ey || (y === ey && m <= em)) { out.push(`${y}-${String(m).padStart(2, "0")}`); if (++m > 12) { m = 1; y++; } }
+  return out;
+})();
+const catRank = [...group(ROWS, r => r.c)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+const TOP = catRank.slice(0, 7);
+const bucket = c => TOP.includes(c) ? c : "Other";
+const slotVar = c => { const i = TOP.indexOf(c); return i >= 0 ? `--s${i + 1}` : "--s-other"; };
+const payments = [...group(ROWS, r => r.p)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+let extraLabels = [...new Set(ROWS.flatMap(r => r.tags))].sort((a, b) => a.localeCompare(b));
+
+// ---- state
+const state = { from: allMonths[Math.max(0, allMonths.length - 12)], to: allMonths[allMonths.length - 1], range: "12", cats: new Set(catRank), pay: "", tag: "", q: "", sortK: 0, sortDir: -1, limit: 100 };
+
+// ---- filter controls
+const fromSel = document.getElementById("from"), toSel = document.getElementById("to"), paySel = document.getElementById("pay"), tagSel = document.getElementById("tag");
+for (const sel of [fromSel, toSel]) sel.innerHTML = allMonths.map(m => `<option value="${m}">${monthName(m)}</option>`).join("");
+paySel.innerHTML = `<option value="">All payment methods</option>` + payments.map(p => `<option>${esc(p)}</option>`).join("");
+function renderTagOptions() {
+  tagSel.innerHTML = `<option value="">All additional labels</option>` + extraLabels.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  tagSel.value = state.tag;
+}
+renderTagOptions();
+function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+
+function setRange(r) {
+  state.range = r; const last = allMonths.length - 1;
+  if (r === "all") state.from = allMonths[0];
+  else if (r === "ytd") state.from = allMonths.find(m => m.startsWith(allMonths[last].slice(0, 4))) || allMonths[0];
+  else state.from = allMonths[Math.max(0, last - (+r - 1))];
+  state.to = allMonths[last]; render();
+}
+document.getElementById("range").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setRange(b.dataset.r); });
+fromSel.onchange = () => { state.from = fromSel.value; if (state.from > state.to) state.to = state.from; state.range = ""; render(); };
+toSel.onchange = () => { state.to = toSel.value; if (state.to < state.from) state.from = state.to; state.range = ""; render(); };
+paySel.onchange = () => { state.pay = paySel.value; render(); };
+tagSel.onchange = () => { state.tag = tagSel.value; render(); };
+document.getElementById("q").oninput = e => { state.q = e.target.value.toLowerCase(); state.limit = 100; renderTable(); };
+
+function renderChips() {
+  const all = state.cats.size === catRank.length;
+  document.getElementById("chips").innerHTML =
+    catRank.map(c => `<button class="chip" data-c="${esc(c)}" aria-pressed="${state.cats.has(c)}"><i style="background:var(${slotVar(c)})"></i>${esc(c)}</button>`).join("") +
+    (all ? "" : `<button class="chip clear" data-all="1">Show all</button>`);
+}
+document.getElementById("chips").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.all) state.cats = new Set(catRank);
+  else {
+    const c = b.dataset.c;
+    // first click on a full set isolates that category; later clicks toggle
+    if (state.cats.size === catRank.length) state.cats = new Set([c]);
+    else if (state.cats.has(c)) { state.cats.delete(c); if (!state.cats.size) state.cats = new Set(catRank); }
+    else state.cats.add(c);
+  }
+  render();
+});
+
+const filtered = () => ROWS.filter(r => r.m >= state.from && r.m <= state.to && state.cats.has(r.c) && (!state.pay || r.p === state.pay) && (!state.tag || r.tags.includes(state.tag)));
+const monthsIn = () => allMonths.filter(m => m >= state.from && m <= state.to);
+
+// ---- charts
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 12;
+const charts = {};
+function baseOpts() {
+  const grid = css("--grid"), muted = css("--text-muted");
+  Chart.defaults.color = css("--text-secondary");
+  return {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+    interaction: { mode: "nearest", intersect: true },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: css("--surface-1"), titleColor: css("--text-primary"), bodyColor: css("--text-secondary"),
+        borderColor: css("--border"), borderWidth: 1, padding: 10, boxPadding: 4, usePointStyle: true,
+        callbacks: { label: ctx => ` ${ctx.dataset.label ? ctx.dataset.label + ": " : ""}${fmt(ctx.parsed[ctx.chart.options.indexAxis === "y" ? "x" : "y"])}` }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: grid }, ticks: { color: muted } },
+      y: { grid: { color: grid }, border: { display: false }, ticks: { color: muted, callback: v => fmtShort(v) }, beginAtZero: true }
+    }
+  };
+}
+function draw(id, config) { charts[id]?.destroy(); charts[id] = new Chart(document.getElementById(id), config); }
+
+function renderMonthly(rows) {
+  const months = monthsIn(), surface = css("--surface-1");
+  const series = [...TOP, "Other"].filter(c => rows.some(r => bucket(r.c) === c));
+  const by = new Map(series.map(s => [s, new Map()]));
+  for (const r of rows) { const m = by.get(bucket(r.c)); m.set(r.m, (m.get(r.m) || 0) + r.a); }
+  const o = baseOpts();
+  o.scales.x.stacked = o.scales.y.stacked = true;
+  o.interaction = { mode: "index", intersect: false };
+  o.plugins.legend = { display: series.length > 1, position: "top", align: "start", labels: { usePointStyle: true, pointStyle: "rectRounded", boxWidth: 8, boxHeight: 8, padding: 14 } };
+  o.plugins.tooltip.itemSort = (a, b) => b.parsed.y - a.parsed.y;
+  o.plugins.tooltip.filter = i => i.parsed.y > 0;
+  o.plugins.tooltip.callbacks.footer = items => "Total: " + fmt(items.reduce((s, i) => s + i.parsed.y, 0));
+  draw("c-monthly", {
+    type: "bar",
+    data: {
+      labels: months.map(monthName),
+      datasets: series.map(s => ({
+        label: s, data: months.map(m => by.get(s).get(m) || 0),
+        backgroundColor: css(slotVar(s)), borderColor: surface, borderWidth: { top: 2 }, borderSkipped: "bottom",
+        maxBarThickness: 44
+      }))
+    }, options: o
+  });
+}
+
+function renderCategories(rows) {
+  const entries = [...group(rows, r => r.c)].sort((a, b) => b[1] - a[1]);
+  const o = baseOpts();
+  o.indexAxis = "y";
+  o.scales = {
+    x: { grid: { color: css("--grid") }, border: { display: false }, ticks: { color: css("--text-muted"), callback: v => fmtShort(v), maxTicksLimit: 5 }, beginAtZero: true },
+    y: { grid: { display: false }, border: { color: css("--grid") }, ticks: { color: css("--text-secondary"), autoSkip: false } }
+  };
+  const total = entries.reduce((s, e) => s + e[1], 0) || 1;
+  o.plugins.tooltip.callbacks.label = ctx => ` ${fmt(ctx.parsed.x)} · ${(ctx.parsed.x / total * 100).toFixed(1)}%`;
+  o.onClick = (_, els) => { if (els.length) { state.cats = new Set([entries[els[0].index][0]]); render(); } };
+  o.onHover = (e, els) => { e.native.target.style.cursor = els.length ? "pointer" : "default"; };
+  document.getElementById("c-cat").parentElement.style.height = Math.max(240, entries.length * 28 + 40) + "px";
+  draw("c-cat", {
+    type: "bar",
+    data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => e[1]), backgroundColor: entries.map(e => css(slotVar(e[0]))), borderRadius: 4, borderSkipped: "start", maxBarThickness: 18 }] },
+    options: o
+  });
+}
+
+function renderCumulative() {
+  // compares the last two months in the selected range, honoring category/payment filters
+  const months = monthsIn(); const cur = months[months.length - 1], prev = months[months.length - 2];
+  const rows = ROWS.filter(r => state.cats.has(r.c) && (!state.pay || r.p === state.pay) && (!state.tag || r.tags.includes(state.tag)));
+  const cumulative = m => {
+    if (!m) return [];
+    const [y, mo] = m.split("-").map(Number), days = new Date(y, mo, 0).getDate();
+    const daily = Array(days).fill(0);
+    for (const r of rows) if (r.m === m) daily[+r.d.slice(8, 10) - 1] += r.a;
+    let run = 0; return daily.map(v => (run += v));
+  };
+  const c = cumulative(cur), p = cumulative(prev);
+  // don't draw the current month past the last day with data
+  const lastDay = Math.max(0, ...rows.filter(r => r.m === cur).map(r => +r.d.slice(8, 10)));
+  const cTrim = c.slice(0, lastDay);
+  document.getElementById("cum-title").textContent = prev ? `Running total: ${monthName(cur)} vs ${monthName(prev)}` : `Running total: ${monthName(cur)}`;
+  const o = baseOpts();
+  o.interaction = { mode: "index", intersect: false };
+  o.plugins.legend = { display: !!prev, position: "top", align: "start", labels: { usePointStyle: true, pointStyle: "line", padding: 14 } };
+  o.scales.x.ticks.maxTicksLimit = 8;
+  o.plugins.tooltip.callbacks.title = items => "Day " + items[0].label;
+  const len = Math.max(c.length, p.length);
+  draw("c-cum", {
+    type: "line",
+    data: {
+      labels: Array.from({ length: len }, (_, i) => i + 1),
+      datasets: [
+        { label: monthName(cur), data: cTrim, borderColor: css("--s1"), backgroundColor: css("--s1"), borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderColor: css("--surface-1"), pointHoverBorderWidth: 2, tension: 0 },
+        ...(prev ? [{ label: monthName(prev), data: p, borderColor: css("--prev"), backgroundColor: css("--prev"), borderWidth: 2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 5, pointHoverBorderColor: css("--surface-1"), pointHoverBorderWidth: 2, tension: 0 }] : [])
+      ]
+    }, options: o
+  });
+}
+
+function renderPayments(rows) {
+  const entries = [...group(rows, r => r.p)].sort((a, b) => b[1] - a[1]);
+  const hasPay = !(entries.length === 1 && entries[0][0] === "—");
+  document.getElementById("pay-hint").textContent = hasPay ? "Share of spend in the selected range" : "No payment-method column mapped in config.toml";
+  const o = baseOpts();
+  o.indexAxis = "y";
+  o.scales = {
+    x: { grid: { color: css("--grid") }, border: { display: false }, ticks: { color: css("--text-muted"), callback: v => fmtShort(v), maxTicksLimit: 5 }, beginAtZero: true },
+    y: { grid: { display: false }, border: { color: css("--grid") }, ticks: { color: css("--text-secondary"), autoSkip: false } }
+  };
+  const total = entries.reduce((s, e) => s + e[1], 0) || 1;
+  o.plugins.tooltip.callbacks.label = ctx => ` ${fmt(ctx.parsed.x)} · ${(ctx.parsed.x / total * 100).toFixed(1)}%`;
+  draw("c-pay", {
+    type: "bar",
+    data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => e[1]), backgroundColor: css("--accent"), borderRadius: 4, borderSkipped: "start", maxBarThickness: 18 }] },
+    options: o
+  });
+}
+
+// ---- KPIs
+function pct(a, b) { if (!b) return ""; const d = (a - b) / b * 100; return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(0)}%</span>`; }
+function renderKpis(rows) {
+  const months = monthsIn(), total = sum(rows);
+  document.getElementById("k-total").textContent = fmt(total);
+  document.getElementById("k-total-sub").textContent = `${rows.length.toLocaleString("en-IN")} transactions · ${monthName(state.from)} – ${monthName(state.to)}`;
+  // average over completed months (exclude the latest month if it's still in progress)
+  const today = new Date().toISOString().slice(0, 7);
+  const complete = months.filter(m => m < today);
+  const avgMonths = complete.length ? complete : months;
+  const avg = rows.filter(r => avgMonths.includes(r.m)).reduce((s, r) => s + r.a, 0) / (avgMonths.length || 1);
+  document.getElementById("k-avg").textContent = fmt(avg);
+  document.getElementById("k-avg-sub").textContent = `over ${avgMonths.length} ${complete.length ? "complete " : ""}month${avgMonths.length === 1 ? "" : "s"}`;
+  // latest month in range vs the one before, compared on the same day-of-month
+  const cur = months[months.length - 1], prev = months[months.length - 2];
+  const base = ROWS.filter(r => state.cats.has(r.c) && (!state.pay || r.p === state.pay) && (!state.tag || r.tags.includes(state.tag)));
+  const curRows = base.filter(r => r.m === cur);
+  const lastDay = Math.max(0, ...curRows.map(r => +r.d.slice(8, 10)));
+  const curTotal = sum(curRows);
+  const prevSame = sum(base.filter(r => r.m === prev && +r.d.slice(8, 10) <= lastDay));
+  document.getElementById("k-mtd-label").textContent = monthName(cur) + (cur === today ? " so far" : "");
+  document.getElementById("k-mtd").textContent = fmt(curTotal);
+  document.getElementById("k-mtd-sub").innerHTML = prev ? `${pct(curTotal, prevSame)} vs ${monthName(prev)} by day ${lastDay} (${fmt(prevSame)})` : "";
+  const top = [...group(rows, r => r.c)].sort((a, b) => b[1] - a[1])[0];
+  document.getElementById("k-top").textContent = top ? top[0] : "—";
+  document.getElementById("k-top-sub").textContent = top ? `${fmt(top[1])} · ${(top[1] / (total || 1) * 100).toFixed(0)}% of spend` : "";
+}
+
+// ---- table
+document.querySelector("thead").addEventListener("click", e => {
+  const th = e.target.closest("th"); if (!th) return;
+  const k = +th.dataset.k; state.sortDir = state.sortK === k ? -state.sortDir : (k === 1 || k === 0 ? -1 : 1); state.sortK = k; renderTable();
+});
+function renderTable() {
+  const key = ["d", "a", "c", "p", "desc", "tags"][state.sortK];
+  let rows = filtered();
+  if (state.q) rows = rows.filter(r => (r.desc + " " + r.c + " " + r.p + " " + r.sub + " " + r.tags.join(" ")).toLowerCase().includes(state.q));
+  rows.sort((x, y) => (x[key] > y[key] ? 1 : x[key] < y[key] ? -1 : 0) * state.sortDir);
+  document.querySelectorAll("th").forEach(th => { th.textContent = th.textContent.replace(/ [▲▼]$/, ""); if (+th.dataset.k === state.sortK) th.textContent += state.sortDir > 0 ? " ▲" : " ▼"; });
+  const shown = rows.slice(0, state.limit);
+  document.getElementById("tbody").innerHTML = shown.length ? shown.map(r =>
+    `<tr><td>${r.d}</td><td><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(${slotVar(r.c)});margin-right:6px"></i>${esc(r.c)}${r.sub ? ` <span class="meta">· ${esc(r.sub)}</span>` : ""}</td><td class="desc">${esc(r.desc)}</td><td><div class="tag-list">${r.tags.map(t => DATA.editable ? `<button class="tag-pill" type="button" data-remove-label="${esc(t)}" data-id="${r.id}" aria-label="Remove label ${esc(t)}">${esc(t)} ×</button>` : `<span class="tag-pill">${esc(t)}</span>`).join("")}${DATA.editable ? `<form class="tag-form" data-id="${r.id}"><input name="label" maxlength="80" placeholder="Add label" aria-label="Add a label to ${esc(r.desc || r.c)}"><button type="submit">Add</button></form>` : ""}</div></td><td>${esc(r.p)}</td><td class="num">${fmt(r.a)}</td></tr>`
+  ).join("") : `<tr><td colspan="6" class="empty">No transactions match</td></tr>`;
+  document.getElementById("more").innerHTML = rows.length > state.limit
+    ? `<button id="morebtn">Show more (${(rows.length - state.limit).toLocaleString("en-IN")} left)</button>` : "";
+  const mb = document.getElementById("morebtn"); if (mb) mb.onclick = () => { state.limit += 200; renderTable(); };
+}
+
+function render() {
+  fromSel.value = state.from; toSel.value = state.to; paySel.value = state.pay; tagSel.value = state.tag;
+  document.querySelectorAll("#range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === state.range));
+  renderChips();
+  const rows = filtered();
+  renderKpis(rows); renderMonthly(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
+}
+
+async function changeLabel(expenseId, label, action, control) {
+  const status = document.getElementById("label-status");
+  if (control) control.disabled = true;
+  status.textContent = `${action === "add" ? "Adding" : "Removing"} label…`;
+  try {
+    const response = await fetch("/api/labels", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expense_id: Number(expenseId), label, action })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not update label");
+    const row = ROWS.find(r => r.id === result.expense_id);
+    if (row) row.tags = result.labels;
+    extraLabels = result.all_labels;
+    if (state.tag && !extraLabels.includes(state.tag)) state.tag = "";
+    renderTagOptions();
+    status.textContent = `${action === "add" ? "Added" : "Removed"} “${label}” in the database.`;
+    render();
+  } catch (error) {
+    status.textContent = `Could not save label: ${error.message}. Open the dashboard with python serve.py.`;
+  } finally {
+    if (control) control.disabled = false;
+  }
+}
+
+document.getElementById("tbody").addEventListener("submit", e => {
+  const form = e.target.closest(".tag-form"); if (!form) return;
+  e.preventDefault();
+  const input = form.elements.label, label = input.value.trim();
+  if (label) changeLabel(form.dataset.id, label, "add", form.querySelector("button"));
+});
+document.getElementById("tbody").addEventListener("click", e => {
+  const button = e.target.closest("[data-remove-label]"); if (!button) return;
+  changeLabel(button.dataset.id, button.dataset.removeLabel, "remove", button);
+});
+
+document.getElementById("meta").textContent =
+  (DATA.lastSync ? `Last synced ${DATA.lastSync.replace("T", " ")}` : "") + ` · ${ROWS.length.toLocaleString("en-IN")} expenses stored`;
+if (!ROWS.length) {
+  document.querySelector(".wrap").innerHTML += `<div class="card empty">No expenses yet — run <code>python sync.py</code> first.</div>`;
+} else {
+  render();
+  // re-color charts if the OS theme flips
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+}
+</script>
+</body>
+</html>
