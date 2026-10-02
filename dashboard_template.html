@@ -82,6 +82,9 @@ select, input[type="search"] {
 .chart.tall { height: 340px; }
 .table-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .table-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.trend-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.trend-table { margin-top: 12px; font-size: 13px; }
+.trend-table td:first-child i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
 th { color: var(--text-secondary); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; }
@@ -142,6 +145,23 @@ button.tag-pill { cursor: pointer; }
       <div class="hint">Click a bar to show only that category</div>
       <div class="chart tall"><canvas id="c-cat"></canvas></div>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="trend-head">
+      <div>
+        <h2>Monthly trend by label</h2>
+        <div class="hint" id="trend-hint"></div>
+      </div>
+      <div class="seg" id="trend-by">
+        <button data-by="label">Label</button><button data-by="tag">Additional label</button>
+      </div>
+    </div>
+    <div class="chart tall"><canvas id="c-trend"></canvas></div>
+    <div class="tscroll"><table class="trend-table">
+      <thead><tr><th>Label</th><th class="num">Total</th><th class="num">Avg / complete month</th><th class="num" id="trend-last-h">Last month</th><th class="num">Last vs avg</th></tr></thead>
+      <tbody id="trend-body"></tbody>
+    </table></div>
   </div>
 
   <div class="grid even">
@@ -208,9 +228,12 @@ const bucket = c => TOP.includes(c) ? c : "Other";
 const slotVar = c => { const i = TOP.indexOf(c); return i >= 0 ? `--s${i + 1}` : "--s-other"; };
 const payments = [...group(ROWS, r => r.p)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
 let extraLabels = [...new Set(ROWS.flatMap(r => r.tags))].sort((a, b) => a.localeCompare(b));
+// additional labels get their own stable color order, ranked by all-time spend
+const tagSpend = () => { const g = new Map(); for (const r of ROWS) for (const t of r.tags) g.set(t, (g.get(t) || 0) + r.a); return g; };
+const tagSlotVar = t => { const i = [...tagSpend()].sort((a, b) => b[1] - a[1]).slice(0, 7).findIndex(e => e[0] === t); return i >= 0 ? `--s${i + 1}` : "--s-other"; };
 
 // ---- state
-const state = { from: allMonths[Math.max(0, allMonths.length - 12)], to: allMonths[allMonths.length - 1], range: "12", cats: new Set(catRank), pay: "", tag: "", q: "", month: "", sortK: 0, sortDir: -1, limit: 100 };
+const state = { from: allMonths[Math.max(0, allMonths.length - 12)], to: allMonths[allMonths.length - 1], range: "12", cats: new Set(catRank), pay: "", tag: "", q: "", month: "", trendBy: "label", sortK: 0, sortDir: -1, limit: 100 };
 
 // ---- filter controls
 const fromSel = document.getElementById("from"), toSel = document.getElementById("to"), paySel = document.getElementById("pay"), tagSel = document.getElementById("tag");
@@ -318,6 +341,52 @@ function renderMonthly(rows) {
     }, options: o
   });
 }
+
+function renderTrend(rows) {
+  const months = monthsIn(), byTag = state.trendBy === "tag";
+  document.querySelectorAll("#trend-by button").forEach(b => b.setAttribute("aria-pressed", b.dataset.by === state.trendBy));
+  // series key(s) per row: a Label (top 7 + Other), or every additional label on the row
+  const keys = byTag ? r => r.tags.map(t => tagSlotVar(t) === "--s-other" ? "Other" : t) : r => [bucket(r.c)];
+  const color = k => css(k === "Other" ? "--s-other" : byTag ? tagSlotVar(k) : slotVar(k));
+  const by = new Map();
+  for (const r of rows) for (const k of keys(r)) {
+    if (!by.has(k)) by.set(k, new Map());
+    by.get(k).set(r.m, (by.get(k).get(r.m) || 0) + r.a);
+  }
+  const series = [...by].map(([k, m]) => [k, months.map(mo => m.get(mo) || 0)])
+    .sort((a, b) => (a[0] === "Other") - (b[0] === "Other") || b[1].reduce((s, v) => s + v, 0) - a[1].reduce((s, v) => s + v, 0));
+  document.getElementById("trend-hint").textContent = byTag
+    ? "Spend per month for each additional label; an expense with several labels counts under each. Click a legend item to hide it."
+    : "Spend per month for each Label; Labels outside the top 7 fold into Other. Click a legend item to hide it.";
+  const o = baseOpts();
+  o.interaction = { mode: "index", intersect: false };
+  o.plugins.legend = { display: series.length > 1, position: "top", align: "start", labels: { usePointStyle: true, pointStyle: "line", padding: 14 } };
+  o.plugins.tooltip.itemSort = (a, b) => b.parsed.y - a.parsed.y;
+  const surface = css("--surface-1"), single = months.length < 2;
+  draw("c-trend", {
+    type: "line",
+    data: {
+      labels: months.map(monthName),
+      datasets: series.map(([k, data]) => ({
+        label: k, data, borderColor: color(k), backgroundColor: color(k), borderWidth: 2, tension: 0,
+        pointRadius: single ? 4 : 0, pointHoverRadius: 5, pointHoverBorderColor: surface, pointHoverBorderWidth: 2
+      }))
+    }, options: o
+  });
+  // table view of the same series: totals, then the latest complete month against the
+  // average of complete months (a month still in progress would always look low)
+  const today = new Date().toISOString().slice(0, 7);
+  const done = months.map((m, i) => [m, i]).filter(([m]) => m < today);
+  const cmp = done.length ? done : months.map((m, i) => [m, i]);
+  const last = cmp[cmp.length - 1];
+  document.getElementById("trend-last-h").textContent = last ? monthName(last[0]) : "Last month";
+  document.getElementById("trend-body").innerHTML = series.length ? series.map(([k, data]) => {
+    const total = data.reduce((s, v) => s + v, 0), latest = last ? data[last[1]] : 0;
+    const avg = cmp.reduce((s, [, i]) => s + data[i], 0) / (cmp.length || 1);
+    return `<tr><td><i style="background:${color(k)}"></i>${esc(k)}</td><td class="num">${fmt(total)}</td><td class="num">${fmt(avg)}</td><td class="num">${fmt(latest)}</td><td class="num">${pct(latest, avg) || "—"}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty">${byTag ? "No additional labels on expenses in this range" : "No expenses in this range"}</td></tr>`;
+}
+document.getElementById("trend-by").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.trendBy = b.dataset.by; renderTrend(filtered()); } });
 
 function renderCategories(rows) {
   const entries = [...group(rows, r => r.c)].sort((a, b) => b[1] - a[1]);
@@ -446,7 +515,7 @@ function render() {
   document.querySelectorAll("#range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === state.range));
   renderChips(); renderMonthOptions();
   const rows = filtered();
-  renderKpis(rows); renderMonthly(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
+  renderKpis(rows); renderMonthly(rows); renderTrend(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
 }
 
 async function changeLabel(expenseId, label, action, control) {

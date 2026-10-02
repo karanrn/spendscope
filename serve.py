@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import sqlite3
 import tomllib
+import urllib.request
 import webbrowser
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -114,6 +116,15 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
+def dashboard_running(url: str) -> bool:
+    """True if the server at url answers like this dashboard."""
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            return b"Expense Dashboard" in response.read(4096)
+    except OSError:
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="config.toml")
@@ -125,11 +136,20 @@ def main() -> None:
     db_path, currency = configured_values(args.config)
     if not db_path.exists():
         raise SystemExit(f"No database at {db_path}. Run sync.py first.")
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(db_path, currency))
     url = f"http://{args.host}:{args.port}/"
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), make_handler(db_path, currency))
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE or not dashboard_running(url):
+            raise
+        # A dashboard is already being served here: just show it again.
+        print(f"Dashboard already running at {url}")
+        if not args.no_open:
+            webbrowser.open_new_tab(url)
+        return
     print(f"Editable expense dashboard: {url} (Ctrl+C to stop)")
     if not args.no_open:
-        webbrowser.open(url)
+        webbrowser.open_new_tab(url)  # a tab in the existing browser window, not a new window
     try:
         server.serve_forever()
     except KeyboardInterrupt:

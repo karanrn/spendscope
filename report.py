@@ -68,7 +68,7 @@ def main() -> None:
     out.write_text(html, encoding="utf-8")
     print(f"Dashboard written: {out}  ({len(load(db)['rows'])} expenses)")
     if a.open:
-        webbrowser.open(out.resolve().as_uri())
+        webbrowser.open_new_tab(out.resolve().as_uri())  # reuse the open browser window
 
 
 if __name__ == "__main__":
