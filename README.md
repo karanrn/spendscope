@@ -187,3 +187,39 @@ On Windows, use Task Scheduler to run `python sync.py` and then `python report.p
 - **Excel:** `.xlsx` and `.xlsm` files need `openpyxl` (included in `requirements.txt`). Set `type = "file"`, set `file_path`, and leave `file_sheet = ""` to scan all tabs.
 
 To try the included CSV sample, set `type = "file"`, set `file_path = "sample_expenses.csv"`, and change the `[columns]` mappings to Date, Amount, Category, Description, Payment Method, and (if needed) Notes before syncing.
+
+## Project layout and development
+
+The code lives in the `expense_tracker` package, one module per job. The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are three-line shortcuts for the matching `python -m expense_tracker <command>`, so existing commands and cron jobs keep working.
+
+```
+expense_tracker/
+  cli.py        command line: sync | serve | report | labels {list,add,remove}
+  config.py     reads config.toml; relative paths resolve against the config file
+  sources.py    Google Sheets API, public CSV/XLSX export, local .xlsx/.csv
+  parsing.py    raw rows → expense records (headers, dates, amounts, row keys)
+  sync.py       incremental / full-rescan / mirror import and the failures log
+  db.py         SQLite schema, migrations, connection settings
+  labels.py     additional-label operations shared by the CLI and the server
+  report.py     dashboard data and HTML rendering
+  server.py     local dashboard server and /api/labels
+  templates/dashboard.html
+tests/          unittest suite (standard library only)
+```
+
+Where to make common changes:
+
+- **New source type:** add a reader in `sources.py` and a branch in `read_rows`.
+- **New column or parsing rule:** `parsing.py`; add a case to `tests/test_parsing.py`.
+- **Schema change:** `db.py`. Keep it additive and migrate existing databases in `initialize_database`, as the `year` column does.
+- **Dashboard UI:** `templates/dashboard.html`; its data comes from `report.load`.
+
+Library code raises `ExpenseTrackerError` for problems the user can fix; only `cli.py` turns those into an exit message.
+
+Run the tests (no extra dependencies):
+
+```bash
+make test        # or: python -m unittest discover -s tests -t .
+```
+
+Optionally, `pip install -e .` adds an `expense-tracker` command (for example, `expense-tracker sync --dry-run`).

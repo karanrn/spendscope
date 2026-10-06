@@ -1,6 +1,7 @@
 PYTHON ?= python3
+APP = $(PYTHON) -m expense_tracker
 
-.PHONY: help sync dry-run serve report report-open run
+.PHONY: help sync dry-run serve report report-open run test
 
 help:
 	@echo "Expense tracker targets:"
@@ -10,21 +11,25 @@ help:
 	@echo "  make run         Sync, then start the editable dashboard"
 	@echo "  make report      Generate a standalone, view-only dashboard.html"
 	@echo "  make report-open Generate and open the standalone dashboard"
+	@echo "  make test        Run the unit tests"
 
 sync:
-	$(PYTHON) sync.py
+	$(APP) sync
 
 dry-run:
-	$(PYTHON) sync.py --dry-run
+	$(APP) sync --dry-run
 
 serve:
-	$(PYTHON) serve.py
+	$(APP) serve
 
 report:
-	$(PYTHON) report.py
+	$(APP) report
 
 report-open:
-	$(PYTHON) report.py --open
+	$(APP) report --open
 
 run: sync
-	$(PYTHON) serve.py
+	$(APP) serve
+
+test:
+	$(PYTHON) -m unittest discover -s tests -t .
