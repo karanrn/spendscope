@@ -7,6 +7,22 @@ This project imports all accessible yearly Google spreadsheets whose titles matc
 - `serve.py` runs the dashboard locally with controls to add/remove additional labels on each transaction; changes are written to SQLite immediately.
 - `labels.py` attaches your own extra labels to transactions without changing the workbook’s existing Label values.
 
+### Walkthrough video
+
+[![Walkthrough: make dry-run, make sync, labels.py and make serve, then a tour of the dashboard](docs/screenshots/walkthrough-thumbnail.jpg)](docs/expense-tracker-demo.mp4)
+
+[Watch the 85-second walkthrough (MP4)](docs/expense-tracker-demo.mp4). It runs `make dry-run`, `make sync`, `labels.py` and `make serve`, then tours the dashboard: date ranges, Label filters, the monthly trend, transaction search, and adding and filtering by additional labels.
+
+### Screenshots
+
+![Dashboard overview: totals, monthly spend by category, and category breakdown](docs/screenshots/dashboard-overview.png)
+
+| Monthly trend per Label | Searchable transactions with additional labels |
+|---|---|
+| ![Monthly trend by label with totals, averages and last month vs average](docs/screenshots/trend-by-label.png) | ![Transactions filtered to September and searched for “swiggy”, with an added Weekend label](docs/screenshots/transactions.png) |
+
+_Screenshots use made-up data entered into the [template](#google-sheet-template)._
+
 The expected transaction columns on each month sheet are:
 
 | Date | Expense | Item | Label |
