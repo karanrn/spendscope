@@ -15,6 +15,50 @@ The expected transaction columns on each month sheet are:
 
 Header unit suffixes such as `Expense(INR)` are accepted as `Expense`. Sheets API dates formatted as `M/D` without a year are interpreted as month/day and get the year from the parent `Expenses YYYY` spreadsheet. Worksheets named in `source.skip_worksheets` (default `Summary`) are not read. Side panels next to the expense columns (such as a monthly `Total` cell) are ignored, so the expense on the same row is still imported. Zero-amount rows are skipped. Rows that look like expenses but have an unreadable date or amount are written to `parse_failures.csv` (`parsing.failures_log`), which is overwritten on every sync.
 
+## Google Sheet template
+
+[`Template - Expenses 2026.xlsx`](Template%20-%20Expenses%202026.xlsx) is a ready-made yearly workbook in the layout `sync.py` expects. To use it:
+
+1. In Google Drive, choose **New → File upload**, upload the template, then open it and choose **File → Save as Google Sheets**. (The month-sheet formulas use Google Sheets’ `FILTER`, so they only calculate correctly once converted.)
+2. Rename the Google Sheet to `Expenses YYYY` (for example, `Expenses 2026`) so Drive discovery matches `spreadsheet_title_pattern`.
+3. Share it as a Viewer with the Google account you authorize in Setup.
+4. For a new year, make a copy, rename it and its tabs (`Jan27`, …), and update the tab names in the `Summary` formulas.
+
+### Month tabs (`Jan26` … `Dec26`)
+
+One tab per month. Columns A–D hold the transactions that get imported:
+
+| Column | Header | What to enter |
+|---|---|---|
+| A | `Date` | Transaction date. The cells are formatted `m/d`; the year comes from the spreadsheet title. |
+| B | `Expense(INR)` | Amount as a number. |
+| C | `Item` | Free-text description (searchable in the dashboard). |
+| D | `Label` | Pick from the dropdown: `Food`, `Rent and bills`, `Investment`, `Essential`, `Grocery`, `Misc`, `Petrol`. |
+
+Columns F–G are a per-month summary panel for use inside the sheet; `sync.py` ignores them:
+
+| Row | F | G |
+|---|---|---|
+| 1 | Month | Month name |
+| 2 | Total | Sum of all expenses (`B2:B79`) |
+| 3 | Investments | Sum where Label = `Investment` |
+| 4 | Rent and bills | Sum where Label = `Rent and bills` |
+| 5 | Food (Swiggy) | Sum where Label = `Food` |
+| 6 | Grocery and essentials | Sum where Label = `Grocery` or `Essential` |
+| 7 | Miscellaneous | Sum where Label = `Misc` |
+| 8 | Petrol | Sum where Label = `Petrol` |
+| 9 | Expenses | Rows 4–8, i.e. spending excluding investments |
+
+The Label dropdown and the Total formula cover roughly the first 78 transaction rows (the per-label sums go to row 86). If a month has more entries, extend the data validation and the formula ranges.
+
+### `Summary` tab
+
+A yearly roll-up (cells B30:E37) built from each month tab’s G column: Total per label across all twelve months, Share % of total expenses, and Monthly Avg. Monthly Avg divides by a fixed `8`; change that divisor to the number of months elapsed. The tab is listed in `source.skip_worksheets`, so it is never imported.
+
+### Adding or renaming labels
+
+Labels are free text as far as `sync.py` is concerned — any value in column D is imported as the transaction’s Label and appears in the dashboard. To keep the in-sheet totals accurate, add the new value to the column D dropdown (**Data → Data validation**) on each month tab, and add matching `FILTER` rows in column F–G and in `Summary` if you want it totalled there.
+
 ## Setup
 
 1. In the same Google Cloud project, enable both the **Google Sheets API** and the **Google Drive API**, configure the OAuth consent screen, and create an OAuth Client ID for a **Desktop app**. Drive API is used to discover spreadsheets by title. Save the downloaded client JSON in the project folder. The supplied `service_account.json` is an installed-app OAuth client file, not a service-account key or an OAuth access token.
