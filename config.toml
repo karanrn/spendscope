@@ -47,3 +47,20 @@ currency_symbol = "₹"
 # Rows with expense content that still fail to parse (bad date/amount) are
 # written here on every sync, overwriting the previous run's log.
 failures_log = "parse_failures.csv"
+
+# Bank statements (sync.py --statement FILE). Headers are recognised automatically
+# (Date/Txn Date, Narration/Description/Particulars, Withdrawal/Debit/DR, Deposit/Credit/CR,
+# or one Amount column with an optional Dr/Cr column). Only if a bank's statement is
+# rejected, name its headers here; each value can be one header or a list of them.
+[statements]
+date_formats = []             # tried before the built-in day-first formats
+[statements.columns]
+# date       = "Posted On"
+# narration  = ["Details", "Memo"]
+# debit      = "Money Out"
+# credit     = "Money In"
+# amount     = ""             # single signed amount column, instead of debit + credit
+# type       = ""             # column holding Dr/Cr for a single amount column
+# ref        = ""
+# balance    = ""
+# value_date = ""

@@ -41,6 +41,102 @@ class StatementParsingTests(unittest.TestCase):
             read_statement(bad)
 
 
+class OtherBankLayoutTests(unittest.TestCase):
+    """Made-up statements in layouts typical of other banks (names, dates, amount styles)."""
+
+    def setUp(self):
+        self.project = Project()
+
+    def tearDown(self):
+        self.project.cleanup()
+
+    def write(self, name, text):
+        path = self.project.root / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def summary(self, path, cfg=None):
+        records, deposits = read_statement(path, cfg)
+        return [(r["date"], r["amount"], r["description"], r["payment"]) for r in records], len(deposits)
+
+    def test_tab_delimited_txn_date_with_month_names_and_wrapped_narration(self):
+        path = self.write("sbi.txt", "\n".join([
+            "Account Name\t:\tMr. Someone",
+            "Txn Date\tValue Date\tDescription\tRef No./Cheque No.\tDebit\tCredit\tBalance",
+            "1 Apr 2026\t1 Apr 2026\tTO TRANSFER-UPI/DR/6081/SHOP NAME\tTRANSFER TO 1234\t1,250.00\t\t98,750.00",
+            "\t\tYESB/q123/Payment\t\t\t\t",
+            "2 Apr 2026\t2 Apr 2026\tBY TRANSFER-NEFT*SALARY\tTRANSFER FROM 99\t\t50,000.00\t1,48,750.00",
+            "",
+            "**This is a computer generated statement**",
+        ]))
+        self.assertEqual(self.summary(path), (
+            [("2026-04-01", 1250.0, "TO TRANSFER-UPI/DR/6081/SHOP NAME YESB/q123/Payment", "UPI")], 1))
+
+    def test_single_amount_column_with_dr_cr_column_and_times(self):
+        path = self.write("kotak.csv", "\n".join([
+            "Sl. No.,Transaction Date,Value Date,Description,Chq / Ref No.,Amount,Dr / Cr,Balance,Dr / Cr",
+            "1,01-04-2026 10:15:02,01-04-2026,POS 4321XXXX MOVIE HALL,REF1,\"1,200.00\",DR,\"8,800.00\",CR",
+            "2,02-04-2026 09:00:00,02-04-2026,IMPS-REFUND,REF2,300.00,CR,\"9,100.00\",CR",
+        ]))
+        self.assertEqual(self.summary(path), ([("2026-04-01", 1200.0, "POS 4321XXXX MOVIE HALL", "Card")], 1))
+
+    def test_short_dr_cr_headers(self):
+        path = self.write("axis.csv", "\n".join([
+            "Tran Date,CHQNO,PARTICULARS,DR,CR,BAL,SOL",
+            "05-04-2026,,UPI/P2M/1234/GROCER,450.00,,9550.00,1",
+            "06-04-2026,,INT.PD:01-01-2026 to 31-03-2026,,25.00,9575.00,1",
+        ]))
+        self.assertEqual(self.summary(path), ([("2026-04-05", 450.0, "UPI/P2M/1234/GROCER", "UPI")], 1))
+
+    def test_html_table_saved_as_xls(self):
+        path = self.write("icici.xls", """<html><body><table>
+            <tr><td>Account Number</td><td>XXXX1234</td></tr>
+            <tr><th>S No.</th><th>Value Date</th><th>Transaction Date</th><th>Cheque Number</th>
+                <th>Transaction Remarks</th><th>Withdrawal Amount (INR )</th>
+                <th>Deposit Amount (INR )</th><th>Balance (INR )</th></tr>
+            <tr><td>1</td><td>03/04/2026</td><td>03/04/2026</td><td>-</td>
+                <td>ATM/CASH WDL/03-04-26</td><td>2,000.00</td><td>0.00</td><td>7,000.00</td></tr>
+            </table></body></html>""")
+        self.assertEqual(self.summary(path), ([("2026-04-03", 2000.0, "ATM/CASH WDL/03-04-26", "ATM")], 0))
+
+    def test_signed_amounts_and_dr_suffixes(self):
+        path = self.write("signed.csv", "\n".join([
+            "Date,Details,Amount",
+            "2026-04-07,Electricity bill,-1500.50",
+            "2026-04-08,Card payment,250.00 Dr",
+            "2026-04-09,Interest,12.00",
+        ]))
+        self.assertEqual(self.summary(path), ([("2026-04-07", 1500.5, "Electricity bill", "Bank"),
+                                               ("2026-04-08", 250.0, "Card payment", "Bank")], 1))
+
+    def test_spreadsheet_date_cells(self):
+        from datetime import datetime
+        from openpyxl import Workbook
+        wb = Workbook()
+        wb.active.append(["Date", "Narration", "Withdrawal", "Deposit"])
+        wb.active.append([datetime(2026, 4, 10), "NEFT-RENT", 20000, None])
+        path = self.project.root / "dates.xlsx"
+        wb.save(path)
+        self.assertEqual(self.summary(path), ([("2026-04-10", 20000.0, "NEFT-RENT", "NEFT")], 0))
+
+    def test_unrecognised_headers_can_be_named_in_config(self):
+        path = self.write("odd.csv", "\n".join([
+            "Posted On,What,Out,In",
+            "11/04/2026,Bookshop,640,",
+        ]))
+        with self.assertRaises(ExpenseTrackerError) as err:
+            read_statement(path)
+        self.assertIn("Closest row", str(err.exception))
+        cfg = {"statements": {"columns": {"date": "Posted On", "narration": ["What", "Memo"],
+                                          "debit": "Out", "credit": "In"}}}
+        self.assertEqual(self.summary(path, cfg), ([("2026-04-11", 640.0, "Bookshop", "Bank")], 0))
+
+    def test_unknown_config_column_is_a_user_error(self):
+        path = self.write("x.csv", "Date,Narration,Debit,Credit\n")
+        with self.assertRaises(ExpenseTrackerError):
+            read_statement(path, {"statements": {"columns": {"payee": "Who"}}})
+
+
 class StatementSyncTests(unittest.TestCase):
     def setUp(self):
         self.project = Project()

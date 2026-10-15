@@ -128,7 +128,7 @@ def sync(cfg: dict, mirror: bool = False, dry_run: bool = False, full_rescan: bo
 
 def sync_statements(cfg: dict, paths: list[Path], dry_run: bool = False) -> None:
     """Import withdrawals from bank statements, skipping ones already stored or in the sheet."""
-    records, deposits = read_statements(paths)
+    records, deposits = read_statements(paths, cfg)
     source = "statements: " + ", ".join(p.name for p in paths)
     db_path = database_path(cfg)
 
