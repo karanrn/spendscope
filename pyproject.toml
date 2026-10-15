@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "openpyxl>=3.1,<4",
     "gspread>=6.0,<7",
+    "xlrd>=2.0,<3",
 ]
 
 [project.scripts]

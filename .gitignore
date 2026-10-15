@@ -10,3 +10,6 @@ parse_failures.csv
 .venv/
 __pycache__/
 *.py[cod]
+
+# Bank statements (personal account data)
+Acct_Statement_*

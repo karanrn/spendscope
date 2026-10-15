@@ -1,3 +1,5 @@
 # Used for public XLSX download fallbacks and local Excel workbook imports.
 openpyxl>=3.1,<4
 gspread>=6.0,<7
+# Reads bank statements exported as legacy .xls.
+xlrd>=2.0,<3

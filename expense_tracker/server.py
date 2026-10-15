@@ -1,4 +1,4 @@
-"""Local dashboard server with an API for editing additional labels."""
+"""Local dashboard server with an API for editing additional labels and missing Labels."""
 from __future__ import annotations
 
 import errno
@@ -61,18 +61,24 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
                 if not isinstance(payload.get("label", ""), str):
                     raise ValueError("Label must be a string")
                 label = labels.clean_label(payload.get("label", ""))
-                if action not in ("add", "remove"):
-                    raise ValueError("Action must be 'add' or 'remove'")
+                if action not in ("add", "remove", "set_primary"):
+                    raise ValueError("Action must be 'add', 'remove' or 'set_primary'")
 
                 con = db.connect(db_path)
                 try:
                     if not labels.expense_exists(con, expense_id):
                         self._json(404, {"error": "Expense not found"})
                         return
-                    change = labels.add_label if action == "add" else labels.remove_label
-                    change(con, [expense_id], label)
+                    if action == "set_primary":
+                        if not labels.set_primary_label(con, [expense_id], label):
+                            self._json(409, {"error": "This expense already has a Label"})
+                            return
+                    else:
+                        change = labels.add_label if action == "add" else labels.remove_label
+                        change(con, [expense_id], label)
                     body = {"expense_id": expense_id, "labels": labels.labels_for(con, expense_id),
-                            "all_labels": labels.all_labels(con)}
+                            "all_labels": labels.all_labels(con),
+                            "category": labels.primary_label(con, expense_id)}
                 finally:
                     con.close()
                 self._json(200, body)

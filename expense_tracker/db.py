@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     description TEXT,
     payment     TEXT,
     extra       TEXT,                   -- JSON of any unmapped columns
+    origin      TEXT NOT NULL DEFAULT 'sheet',  -- 'sheet' or 'bank' (statement import)
     first_seen  TEXT NOT NULL,          -- when this row first came in
     sync_id     INTEGER REFERENCES sync_runs(id)
 );
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 
 
 def initialize_database(con: sqlite3.Connection) -> None:
-    """Create the schema and migrate older databases to include expense year."""
+    """Create the schema and migrate older databases to include expense year and origin."""
     con.executescript(SCHEMA)
     columns = {row[1] for row in con.execute("PRAGMA table_info(expenses)")}
     if "year" not in columns:
@@ -57,6 +58,9 @@ def initialize_database(con: sqlite3.Connection) -> None:
         "UPDATE expenses SET year = CAST(substr(date, 1, 4) AS INTEGER) WHERE year IS NULL"
     )
     con.execute("CREATE INDEX IF NOT EXISTS idx_exp_year ON expenses(year)")
+    if "origin" not in columns:
+        con.execute("ALTER TABLE expenses ADD COLUMN origin TEXT NOT NULL DEFAULT 'sheet'")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_exp_origin_date ON expenses(origin, date)")
     con.commit()
 
 

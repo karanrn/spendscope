@@ -3,6 +3,7 @@
 This project imports all accessible yearly Google spreadsheets whose titles match `Expenses YYYY` (for example, `Expenses 2025`), with one expense worksheet per month, into a durable SQLite database and builds a searchable dashboard.
 
 - `sync.py` reads every monthly worksheet through the Google Sheets API by default, imports transactions, and skips summary/formula rows that do not match the expense columns. If API access is unavailable, it attempts to download the whole spreadsheet as XLSX and parse all tabs (requires the spreadsheet to be publicly viewable).
+- `sync.py --statement FILE…` imports withdrawals from bank account statements (HDFC-style `.xls` or comma-delimited `.txt`) without a Label, skipping ones already stored or already entered in the sheet. See [Bank statements](#bank-statements).
 - `report.py` builds `dashboard.html` with monthly totals, a monthly trend per Label or additional label, Label and payment breakdowns, a searchable transaction list with a month picker, and date/Label/payment/additional-label filters.
 - `serve.py` runs the dashboard locally with controls to add/remove additional labels on each transaction; changes are written to SQLite immediately.
 - `labels.py` attaches your own extra labels to transactions without changing the workbook’s existing Label values.
@@ -126,6 +127,24 @@ Identical transactions on the same date are retained by occurrence, while repeat
 
 `--dry-run` reports what would be inserted without writing. It may initialize an empty database/schema so the configured path can be checked, but it does not save transactions or a sync-history row.
 
+## Bank statements
+
+Bank account statements can be imported alongside, or instead of, the Google Sheet:
+
+```bash
+python sync.py --statement Acct_Statement_XXXXXXXX5898_15102026.xls
+python sync.py --statement statements/*.txt --dry-run   # preview only
+make statement FILES="statements/*.xls"
+```
+
+- **Formats:** the bank's spreadsheet export (`.xls`, needs `xlrd`, included in `requirements.txt`, or `.xlsx`) and its comma-delimited text export (`.txt`/`.csv`). The transaction header (Date, Narration, Chq./Ref.No., Value Date, Withdrawal/Debit, Deposit/Credit, Closing Balance) is found automatically; the address block, separator lines and summary are ignored.
+- **What is stored:** each withdrawal becomes an expense with the narration as Item and the channel (UPI, Card, ACH, NEFT, IMPS, …) as Payment. The reference number, value date and closing balance are kept in `extra`. Deposits (salary, refunds, money received) are skipped.
+- **No Label:** statement rows are stored without a Label and show as *Unlabeled* in the dashboard. Set one per transaction with the **Set Label** box in `serve.py`, or in bulk with `labels.py set-primary` (below). Only expenses without a Label can be changed this way; sheet rows keep the workbook's Label.
+- **Duplicates:** a transaction is identified by its date, reference number, amount and closing balance, so the `.xls` and `.txt` exports of one statement, overlapping statements, and repeated imports never store it twice.
+- **Sheet and statement together:** a withdrawal with the same date and amount (to the rupee) as a sheet row is treated as that sheet row and is not stored. If the statement was imported first, the next sheet sync replaces the matching bank row with the sheet row and moves its additional labels over. Spend the sheet records differently from the bank (one combined “SIPs” entry for several debits, a different date) cannot be matched and appears twice; give those bank rows a Label or leave them for review.
+
+`--mirror` and `--full-rescan` apply to the sheet only; incremental sheet syncs start from the latest *sheet* date, so importing a newer statement does not hide older sheet entries.
+
 ## Add secondary labels to existing Labels
 
 For individual transactions, use the editable dashboard described above. To bulk-assign labels from the command line, use `labels.py` without replacing the workbook Label. Match by existing Label, and optionally narrow the selection by text contained in Item and by date range:
@@ -136,6 +155,15 @@ python labels.py add Reimbursable --source-label Travel --from 2025-01-01 --to 2
 python labels.py list
 python labels.py remove Work --source-label Food --item-contains coffee
 ```
+
+To set the Label itself on expenses that have none (bank-statement imports, or sheet rows with an empty Label), match by Item text and dates:
+
+```bash
+python labels.py set-primary Food --item-contains swiggy
+python labels.py set-primary Investment --item-contains groww --from 2026-04-01
+```
+
+An existing Label matching case-insensitively keeps its spelling, so `food` joins `Food`. `labels.py list` also reports how many expenses still have no Label.
 
 Label matching is case-insensitive; Item matching is case-insensitive substring search. Dates use `YYYY-MM-DD`. Assignments are stored in SQLite, survive restarts and later syncs, and can be selected in the dashboard’s Additional label filter. Existing workbook Labels remain unchanged.
 
@@ -197,8 +225,9 @@ expense_tracker/
   cli.py        command line: sync | serve | report | labels {list,add,remove}
   config.py     reads config.toml; relative paths resolve against the config file
   sources.py    Google Sheets API, public CSV/XLSX export, local .xlsx/.csv
+  statements.py bank statements (.xls/.xlsx/.txt) → unlabeled withdrawal records
   parsing.py    raw rows → expense records (headers, dates, amounts, row keys)
-  sync.py       incremental / full-rescan / mirror import and the failures log
+  sync.py       incremental / full-rescan / mirror import, statement import, sheet↔bank matching
   db.py         SQLite schema, migrations, connection settings
   labels.py     additional-label operations shared by the CLI and the server
   report.py     dashboard data and HTML rendering

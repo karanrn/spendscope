@@ -7,6 +7,10 @@ from expense_tracker import ExpenseTrackerError
 from expense_tracker.db import timestamp
 
 MAX_LABEL_LENGTH = 80
+# Label (category) values that mean "no Label yet": bank imports store "", and sheet rows
+# with an empty Label column get "Uncategorized". Only these can be given a Label here.
+MISSING_LABELS = ("", "Uncategorized")
+MISSING_SQL = "category IN (%s)" % ", ".join("'%s'" % v for v in MISSING_LABELS)
 
 
 def clean_label(label: str) -> str:
@@ -33,6 +37,46 @@ def find_expenses(con: sqlite3.Connection, source_label: str, item_contains: str
         params.append(to_date)
     return [row[0] for row in con.execute(
         "SELECT id FROM expenses WHERE " + " AND ".join(clauses), params)]
+
+
+def find_unlabeled(con: sqlite3.Connection, item_contains: str | None = None,
+                   from_date: str | None = None, to_date: str | None = None) -> list[int]:
+    """IDs of expenses without a Label, optionally narrowed by Item text and dates."""
+    clauses, params = [MISSING_SQL], []
+    if item_contains:
+        clauses.append("instr(lower(COALESCE(description, '')), lower(?)) > 0")
+        params.append(item_contains)
+    if from_date:
+        clauses.append("date >= ?")
+        params.append(from_date)
+    if to_date:
+        clauses.append("date <= ?")
+        params.append(to_date)
+    return [row[0] for row in con.execute(
+        "SELECT id FROM expenses WHERE " + " AND ".join(clauses), params)]
+
+
+def set_primary_label(con: sqlite3.Connection, expense_ids: list[int], label: str) -> int:
+    """Give expenses that have no Label this one; returns how many changed (labelled ones are left alone).
+
+    An existing Label matching case-insensitively keeps its spelling, so "food" joins "Food".
+    """
+    existing = con.execute(
+        "SELECT category FROM expenses WHERE category = ? COLLATE NOCASE LIMIT 1", (label,)).fetchone()
+    if existing and existing[0] not in MISSING_LABELS:
+        label = existing[0]
+    with con:
+        cur = con.executemany(f"UPDATE expenses SET category = ? WHERE id = ? AND {MISSING_SQL}",
+                              [(label, expense_id) for expense_id in expense_ids])
+    return cur.rowcount
+
+
+def primary_label(con: sqlite3.Connection, expense_id: int) -> str:
+    return con.execute("SELECT category FROM expenses WHERE id = ?", (expense_id,)).fetchone()[0]
+
+
+def unlabeled_count(con: sqlite3.Connection) -> int:
+    return con.execute(f"SELECT COUNT(*) FROM expenses WHERE {MISSING_SQL}").fetchone()[0]
 
 
 def add_label(con: sqlite3.Connection, expense_ids: list[int], label: str) -> int:

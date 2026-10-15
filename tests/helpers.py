@@ -67,3 +67,47 @@ def quietly(fn, *args, **kwargs):
     with contextlib.redirect_stdout(out):
         result = fn(*args, **kwargs)
     return result, out.getvalue()
+
+
+# A made-up bank statement in the bank's comma-delimited .txt layout: padded fields,
+# truncated headers, one deposit. Against CSV_ROWS, the first two withdrawals are
+# already in the sheet (449.60 is the sheet's 450 to the rupee); the third is not.
+STATEMENT_TXT = [
+    "",
+    "  Date     ,Narration                        ,Value Dat,Debit Amount       ,Credit Amount      ,Chq/Ref Number   ,Closing Balance",
+    " 01/01/26  ,UPI-CAFE COFFEE-PAYMENT FROM PHONE  ,01/01/26 ,         449.60     ,           0.00     ,0000000000000111       ,        9550.40  ",
+    " 01/01/26  ,UPI-A FRIEND-SPLIT                  ,01/01/26 ,           0.00     ,         200.00     ,0000000000000112       ,        9750.40  ",
+    " 02/01/26  ,POS 416021XXXXXX7960 GROCER         ,02/01/26 ,        1500.00     ,           0.00     ,0000000000000113       ,        8250.40  ",
+    " 03/01/26  ,ACH D- GROWW PAY SERVICES P-0000ABC ,03/01/26 ,        5000.00     ,           0.00     ,0000000000000114       ,        3250.40  ",
+]
+
+# The same transactions in the bank's spreadsheet layout (its .xls export, saved as .xlsx
+# here): a preamble, differently named headers, asterisk rules and a summary block.
+STATEMENT_SHEET = [
+    ["HDFC BANK Ltd.          Statement of accounts"],
+    ["Statement From  :  01/01/2026         To  :  03/01/2026"],
+    ["*" * 40],
+    ["Date", "Narration", "Chq./Ref.No.", "Value Dt", "Withdrawal Amt.", "Deposit Amt.", "Closing Balance"],
+    ["********", "*****", "*****", "********", "*****", "*****", "*****"],
+    ["01/01/26", "UPI-CAFE COFFEE-PAYMENT FROM PHONE", "0000000000000111", "01/01/26", 449.6, None, 9550.4],
+    ["01/01/26", "UPI-A FRIEND-SPLIT", "0000000000000112", "01/01/26", None, 200.0, 9750.4],
+    ["02/01/26", "POS 416021XXXXXX7960 GROCER", "0000000000000113", "02/01/26", 1500.0, None, 8250.4],
+    ["03/01/26", "ACH D- GROWW PAY SERVICES P-0000ABC", "0000000000000114", "03/01/26", 5000.0, None, 3250.4],
+    [None],
+    ["STATEMENT SUMMARY  :-"],
+    ["Opening Balance", None, None, None, "Debits", "Credits", "Closing Bal"],
+    [10000.0, None, None, None, 6949.6, 200.0, 3250.4],
+]
+
+
+def write_statements(root: Path) -> tuple[Path, Path]:
+    """Write STATEMENT_TXT and STATEMENT_SHEET under root; returns (txt path, xlsx path)."""
+    from openpyxl import Workbook
+    txt = root / "statement.txt"
+    txt.write_text("\r\n".join(STATEMENT_TXT) + "\r\n", encoding="utf-8")
+    wb = Workbook()
+    for row in STATEMENT_SHEET:
+        wb.active.append(row)
+    xlsx = root / "statement.xlsx"
+    wb.save(xlsx)
+    return txt, xlsx

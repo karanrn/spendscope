@@ -9,8 +9,8 @@ from expense_tracker import ExpenseTrackerError, db, labels
 from expense_tracker.cli import main
 from expense_tracker.config import database_path
 from expense_tracker.server import make_handler
-from expense_tracker.sync import sync
-from tests.helpers import Project, quietly
+from expense_tracker.sync import sync, sync_statements
+from tests.helpers import Project, quietly, write_statements
 
 
 class LabelTests(unittest.TestCase):
@@ -55,6 +55,7 @@ class ServerTests(unittest.TestCase):
         self.project = Project()
         cfg = self.project.config()
         quietly(sync, cfg)
+        quietly(sync_statements, cfg, list(write_statements(self.project.root)))  # adds expense 4, unlabeled
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(database_path(cfg), "₹"))
         self.server.RequestHandlerClass.log_message = lambda *args: None
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -81,12 +82,19 @@ class ServerTests(unittest.TestCase):
         self.assertIn("Expense Dashboard", html)
         self.assertIn('"editable":true', html)
         self.assertIn("Coffee and sandwich", html)
+        self.assertIn('"missingLabels":["","Uncategorized"]', html)
 
     def test_add_and_remove_label(self):
         status, body = self.post({"expense_id": 1, "label": " Work ", "action": "add"})
         self.assertEqual((status, body["labels"], body["all_labels"]), (200, ["Work"], ["Work"]))
         status, body = self.post({"expense_id": 1, "label": "work", "action": "remove"})
         self.assertEqual((status, body["labels"]), (200, []))
+
+    def test_set_primary_label_only_when_missing(self):
+        status, body = self.post({"expense_id": 4, "label": "Investment", "action": "set_primary"})
+        self.assertEqual((status, body["category"]), (200, "Investment"))
+        self.assertEqual(self.post({"expense_id": 4, "label": "Other", "action": "set_primary"})[0], 409)
+        self.assertEqual(self.post({"expense_id": 1, "label": "Other", "action": "set_primary"})[0], 409)
 
     def test_bad_requests(self):
         self.assertEqual(self.post({"expense_id": 999, "label": "X", "action": "add"})[0], 404)

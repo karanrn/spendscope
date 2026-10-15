@@ -66,7 +66,7 @@ class SyncTests(unittest.TestCase):
 
 
 class DatabaseTests(unittest.TestCase):
-    def test_old_database_gains_year_column(self):
+    def test_old_database_gains_year_and_origin_columns(self):
         project = Project()
         self.addCleanup(project.cleanup)
         path = project.root / "old.db"
@@ -78,7 +78,7 @@ class DatabaseTests(unittest.TestCase):
                         " VALUES ('k', '2025-03-04', '2025-03', 10, 'Food', 'now')")
         con = db.connect(path)
         self.addCleanup(con.close)
-        self.assertEqual(con.execute("SELECT year FROM expenses").fetchone(), (2025,))
+        self.assertEqual(con.execute("SELECT year, origin FROM expenses").fetchone(), (2025, "sheet"))
 
     def test_connect_requires_existing_database_unless_creating(self):
         project = Project()

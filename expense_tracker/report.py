@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from expense_tracker import db
+from expense_tracker.labels import MISSING_LABELS
 
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "dashboard.html"
 
@@ -34,7 +35,7 @@ def load(db_path: Path) -> dict:
 
 def render_dashboard(data: dict, symbol: str, editable: bool = False) -> str:
     """Render the dashboard, optionally enabling local label editing."""
-    data = {**data, "currency": symbol, "editable": editable}
+    data = {**data, "currency": symbol, "editable": editable, "missingLabels": list(MISSING_LABELS)}
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     return TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", payload)
 

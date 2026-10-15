@@ -99,6 +99,10 @@ button.tag-pill { cursor: pointer; }
 .tag-form { display: inline-flex; gap: 4px; margin: 2px 0; }
 .tag-form input { width: 100px; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); background: var(--surface-1); }
 .tag-form button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--accent); cursor: pointer; }
+.primary-form { display: inline-flex; gap: 4px; margin-left: 6px; }
+.primary-form input { width: 110px; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); background: var(--surface-1); }
+.primary-form button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--accent); cursor: pointer; }
+.missing { color: var(--text-muted); font-style: italic; }
 .label-status { min-height: 18px; color: var(--text-muted); font-size: 12px; }
 .empty { color: var(--text-muted); padding: 40px 0; text-align: center; }
 @media (max-width: 860px) {
@@ -186,6 +190,7 @@ button.tag-pill { cursor: pointer; }
       </div>
     </div>
     <div class="label-status" id="label-status" aria-live="polite"></div>
+    <datalist id="primary-labels"></datalist>
     <div class="tscroll"><table>
       <thead><tr>
         <th data-k="0">Date</th><th data-k="2">Label</th><th data-k="4">Item</th>
@@ -200,7 +205,9 @@ button.tag-pill { cursor: pointer; }
 <script>
 const DATA = /*__DATA__*/null;
 const CUR = DATA.currency || "₹";
-const ROWS = DATA.rows.map(r => ({ d: r[0], m: r[0].slice(0, 7), a: r[1], c: r[2], p: r[3] || "—", desc: r[4], sub: r[5], tags: r[6] || [], id: r[7] }));
+// expenses without a Label (bank-statement imports, blank sheet Labels) show as "Unlabeled"
+const MISSING = DATA.missingLabels || [], UNLABELED = "Unlabeled";
+const ROWS = DATA.rows.map(r => ({ d: r[0], m: r[0].slice(0, 7), a: r[1], c: r[2] || UNLABELED, miss: MISSING.includes(r[2]), p: r[3] || "—", desc: r[4], sub: r[5], tags: r[6] || [], id: r[7] }));
 const fmt = v => CUR + Math.round(v).toLocaleString("en-IN");
 const fmtShort = v => {
   const a = Math.abs(v);
@@ -222,8 +229,13 @@ const allMonths = (() => {
   while (y < ey || (y === ey && m <= em)) { out.push(`${y}-${String(m).padStart(2, "0")}`); if (++m > 12) { m = 1; y++; } }
   return out;
 })();
-const catRank = [...group(ROWS, r => r.c)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
-const TOP = catRank.slice(0, 7);
+let catRank, TOP;
+function rankCategories() {
+  catRank = [...group(ROWS, r => r.c)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  TOP = catRank.slice(0, 7);
+  document.getElementById("primary-labels").innerHTML = catRank.filter(c => !ROWS.some(r => r.c === c && r.miss)).map(c => `<option value="${esc(c)}">`).join("");
+}
+rankCategories();
 const bucket = c => TOP.includes(c) ? c : "Other";
 const slotVar = c => { const i = TOP.indexOf(c); return i >= 0 ? `--s${i + 1}` : "--s-other"; };
 const payments = [...group(ROWS, r => r.p)].sort((a, b) => b[1] - a[1]).map(e => e[0]);
@@ -503,7 +515,7 @@ function renderTable() {
   document.querySelectorAll("th").forEach(th => { th.textContent = th.textContent.replace(/ [▲▼]$/, ""); if (+th.dataset.k === state.sortK) th.textContent += state.sortDir > 0 ? " ▲" : " ▼"; });
   const shown = rows.slice(0, state.limit);
   document.getElementById("tbody").innerHTML = shown.length ? shown.map(r =>
-    `<tr><td>${r.d}</td><td><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(${slotVar(r.c)});margin-right:6px"></i>${esc(r.c)}${r.sub ? ` <span class="meta">· ${esc(r.sub)}</span>` : ""}</td><td class="desc">${esc(r.desc)}</td><td><div class="tag-list">${r.tags.map(t => DATA.editable ? `<button class="tag-pill" type="button" data-remove-label="${esc(t)}" data-id="${r.id}" aria-label="Remove label ${esc(t)}">${esc(t)} ×</button>` : `<span class="tag-pill">${esc(t)}</span>`).join("")}${DATA.editable ? `<form class="tag-form" data-id="${r.id}"><input name="label" maxlength="80" placeholder="Add label" aria-label="Add a label to ${esc(r.desc || r.c)}"><button type="submit">Add</button></form>` : ""}</div></td><td>${esc(r.p)}</td><td class="num">${fmt(r.a)}</td></tr>`
+    `<tr><td>${r.d}</td><td><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(${slotVar(r.c)});margin-right:6px"></i>${r.miss ? `<span class="missing">${esc(r.c)}</span>` : esc(r.c)}${r.sub ? ` <span class="meta">· ${esc(r.sub)}</span>` : ""}${r.miss && DATA.editable ? `<form class="primary-form" data-id="${r.id}"><input name="label" maxlength="80" list="primary-labels" placeholder="Set Label" aria-label="Set the Label of ${esc(r.desc || "this expense")}"><button type="submit">Set</button></form>` : ""}</td><td class="desc">${esc(r.desc)}</td><td><div class="tag-list">${r.tags.map(t => DATA.editable ? `<button class="tag-pill" type="button" data-remove-label="${esc(t)}" data-id="${r.id}" aria-label="Remove label ${esc(t)}">${esc(t)} ×</button>` : `<span class="tag-pill">${esc(t)}</span>`).join("")}${DATA.editable ? `<form class="tag-form" data-id="${r.id}"><input name="label" maxlength="80" placeholder="Add label" aria-label="Add a label to ${esc(r.desc || r.c)}"><button type="submit">Add</button></form>` : ""}</div></td><td>${esc(r.p)}</td><td class="num">${fmt(r.a)}</td></tr>`
   ).join("") : `<tr><td colspan="6" class="empty">No transactions match</td></tr>`;
   document.getElementById("more").innerHTML = rows.length > state.limit
     ? `<button id="morebtn">Show more (${(rows.length - state.limit).toLocaleString("en-IN")} left)</button>` : "";
@@ -518,10 +530,11 @@ function render() {
   renderKpis(rows); renderMonthly(rows); renderTrend(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
 }
 
+const VERBS = { add: ["Adding", "Added"], remove: ["Removing", "Removed"], set_primary: ["Setting", "Set Label"] };
 async function changeLabel(expenseId, label, action, control) {
   const status = document.getElementById("label-status");
   if (control) control.disabled = true;
-  status.textContent = `${action === "add" ? "Adding" : "Removing"} label…`;
+  status.textContent = `${VERBS[action][0]} label…`;
   try {
     const response = await fetch("/api/labels", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -530,11 +543,23 @@ async function changeLabel(expenseId, label, action, control) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not update label");
     const row = ROWS.find(r => r.id === result.expense_id);
-    if (row) row.tags = result.labels;
+    if (row) {
+      row.tags = result.labels;
+      if (action === "set_primary") {
+        const wasAll = state.cats.size === catRank.length, shown = state.cats.has(row.c);
+        row.c = result.category; row.miss = false;
+        rankCategories();
+        // keep the row visible: follow it into its new Label unless categories were narrowed away from it
+        if (wasAll) state.cats = new Set(catRank);
+        else if (shown) state.cats.add(row.c);
+        for (const c of [...state.cats]) if (!catRank.includes(c)) state.cats.delete(c);
+        if (!state.cats.size) state.cats = new Set(catRank);
+      }
+    }
     extraLabels = result.all_labels;
     if (state.tag && !extraLabels.includes(state.tag)) state.tag = "";
     renderTagOptions();
-    status.textContent = `${action === "add" ? "Added" : "Removed"} “${label}” in the database.`;
+    status.textContent = `${VERBS[action][1]} “${action === "set_primary" ? result.category : label}” in the database.`;
     render();
   } catch (error) {
     status.textContent = `Could not save label: ${error.message}. Open the dashboard with python serve.py.`;
@@ -544,10 +569,11 @@ async function changeLabel(expenseId, label, action, control) {
 }
 
 document.getElementById("tbody").addEventListener("submit", e => {
-  const form = e.target.closest(".tag-form"); if (!form) return;
+  const form = e.target.closest(".tag-form, .primary-form"); if (!form) return;
   e.preventDefault();
   const input = form.elements.label, label = input.value.trim();
-  if (label) changeLabel(form.dataset.id, label, "add", form.querySelector("button"));
+  const action = form.classList.contains("primary-form") ? "set_primary" : "add";
+  if (label) changeLabel(form.dataset.id, label, action, form.querySelector("button"));
 });
 document.getElementById("tbody").addEventListener("click", e => {
   const button = e.target.closest("[data-remove-label]"); if (!button) return;
