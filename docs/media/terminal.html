@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>expense-tracker — zsh</title>
+<style>
+:root { --bg: #0b0e13; --win: #11151c; --bar: #161b23; --text: #c9d1d9; --dim: #7d8590; --green: #3fb950; --blue: #58a6ff; --cyan: #79c0ff; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+.win { position: absolute; inset: 24px 40px 72px; background: var(--win); border-radius: 10px; border: 1px solid #222934; box-shadow: 0 18px 50px rgba(0,0,0,.5); display: flex; flex-direction: column; overflow: hidden; }
+.bar { height: 30px; background: var(--bar); display: flex; align-items: center; gap: 7px; padding: 0 12px; flex: none; }
+.bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.bar span { color: var(--dim); font: 12px ui-monospace, "DejaVu Sans Mono", monospace; margin-left: 14px; }
+#term { flex: 1; overflow: hidden; padding: 12px 16px; font: 13px/19px "DejaVu Sans Mono", ui-monospace, monospace; color: var(--text); white-space: pre; }
+.prompt { color: var(--green); }
+.cwd { color: var(--cyan); }
+.echo { color: var(--dim); }
+.hl { color: var(--blue); }
+.cursor { display: inline-block; width: 8px; height: 15px; background: var(--text); vertical-align: -2px; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>expense-tracker — zsh</span></div>
+  <div id="term"></div>
+</div>
+<script>
+const STEPS = /*__STEPS__*/[];
+const term = document.getElementById("term");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const promptHtml = '<span class="prompt">➜</span> <span class="cwd">expense-tracker</span> ';
+function line(html) { const d = document.createElement("div"); d.innerHTML = html || " "; term.appendChild(d); term.scrollTop = term.scrollHeight; return d; }
+// lines worth drawing the eye to: results and summaries
+const style = (text, i) => i === 0 && /^python3 /.test(text) ? `<span class="echo">${esc(text)}</span>`
+  : /^(Database |Added |Set Label |Budget for |Budgets for |Dry run|Editable )/.test(text) ? `<span class="hl">${esc(text)}</span>` : esc(text);
+window.play = async (caption) => {
+  for (const step of STEPS) {
+    caption(step.caption);
+    const row = line(promptHtml + '<span class="cmd"></span><span class="cursor"></span>');
+    const cmd = row.querySelector(".cmd");
+    await sleep(300);
+    const delay = step.cmd.length > 40 ? 13 : 38;
+    for (const ch of step.cmd) { cmd.textContent += ch; await sleep(delay); }
+    await sleep(250);
+    row.querySelector(".cursor").remove();
+    for (const [i, text] of step.out.entries()) { line(style(text, i)); await sleep(step.out.length > 6 ? 25 : 60); }
+    await sleep(step.hold || 1000);
+  }
+  line(promptHtml + '<span class="cursor"></span>');
+};
+</script>
+</body>
+</html>

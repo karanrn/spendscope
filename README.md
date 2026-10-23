@@ -7,22 +7,27 @@ This project imports all accessible yearly Google spreadsheets whose titles matc
 - `report.py` builds `dashboard.html` with monthly totals, a monthly trend per Label or additional label, Label and payment breakdowns, a searchable transaction list with a month picker, and date/Label/payment/additional-label filters.
 - `serve.py` runs the dashboard locally with controls to add/remove additional labels on each transaction; changes are written to SQLite immediately.
 - `labels.py` attaches your own extra labels to transactions without changing the workbook’s existing Label values.
+- `python -m expense_tracker budgets` sets monthly budgets per Label; the dashboard flags Labels over budget and shows how far over or under each one is. See [Monthly budgets per Label](#monthly-budgets-per-label).
 
 ### Walkthrough video
 
-[![Walkthrough: make dry-run, make sync, labels.py and make serve, then a tour of the dashboard](docs/screenshots/walkthrough-thumbnail.jpg)](docs/expense-tracker-demo.mp4)
+[![Walkthrough: dry run, sync, bank statement import, labels and budgets from the command line, then a tour of the dashboard](docs/screenshots/walkthrough-thumbnail.jpg)](docs/expense-tracker-demo.mp4)
 
-[Watch the 85-second walkthrough (MP4)](docs/expense-tracker-demo.mp4). It runs `make dry-run`, `make sync`, `labels.py` and `make serve`, then tours the dashboard: date ranges, Label filters, the monthly trend, transaction search, and adding and filtering by additional labels.
+[Watch the 106-second walkthrough (MP4)](docs/expense-tracker-demo.mp4). In the terminal it runs `make dry-run`, `make sync`, `make statement`, `labels.py` (adding labels and giving bank rows a Label) and `budgets` (setting and listing budgets), then `make serve`. The dashboard tour covers the over-budget banner, the Budgets card (stepping through months, adding a budget for one month), date ranges, Label filters, the monthly charts and trend, transaction search, adding an additional label, setting the Label on a bank-statement row, and filtering by additional label.
 
 ### Screenshots
 
-![Dashboard overview: totals, monthly spend by category, and category breakdown](docs/screenshots/dashboard-overview.png)
+![Dashboard overview: over-budget banner, totals, budgets, monthly spend by category, and category breakdown](docs/screenshots/dashboard-overview.png)
 
-| Monthly trend per Label | Searchable transactions with additional labels |
+| Budgets per Label | Monthly trend per Label |
 |---|---|
-| ![Monthly trend by label with totals, averages and last month vs average](docs/screenshots/trend-by-label.png) | ![Transactions filtered to September and searched for “swiggy”, with an added Weekend label](docs/screenshots/transactions.png) |
+| ![Budgets for October: Misc and Grocery over budget, with the difference, the percentage and a usage bar per Label](docs/screenshots/budgets.png) | ![Monthly trend by label with totals, averages and last month vs average](docs/screenshots/trend-by-label.png) |
 
-_Screenshots use made-up data entered into the [template](#google-sheet-template)._
+| Searchable transactions with additional labels | Bank-statement rows waiting for a Label |
+|---|---|
+| ![Transactions filtered to September and searched for “swiggy”, with an added Weekend label](docs/screenshots/transactions.png) | ![Unlabeled bank-statement withdrawals, each with a Set Label box](docs/screenshots/unlabeled.png) |
+
+_Screenshots and video use made-up data entered into the [template](#google-sheet-template), plus a made-up bank statement._
 
 The expected transaction columns on each month sheet are:
 
@@ -254,6 +259,8 @@ expense_tracker/
   templates/dashboard.html
 tests/          unittest suite (standard library only)
 ```
+
+`make media` re-records the walkthrough video and screenshots in `docs/` from made-up data, using the scripts in `docs/media/`. It needs Python with `requirements.txt` installed, Node.js with npm, and `ffmpeg`, and takes about two minutes. The first run installs Playwright into `docs/media/node_modules` (pinned by `package-lock.json`) and downloads its Chromium, so it needs a network connection and an OS that Playwright supports (macOS, Windows via WSL, or a mainstream Linux; a bare Linux may also need `npx --prefix docs/media playwright install-deps`). It builds a demo project in `docs/media/build/`, runs the real commands for the terminal scene, and drives the real dashboard on a free port, so a dashboard you are running yourself is never recorded. The demo is pinned to 23 October 2026. When the dashboard changes, update the tour in `docs/media/record.mjs` and the video description above.
 
 Where to make common changes:
 

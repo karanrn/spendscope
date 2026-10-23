@@ -1,7 +1,7 @@
 PYTHON ?= python3
 APP = $(PYTHON) -m expense_tracker
 
-.PHONY: help sync dry-run statement serve report report-open run test
+.PHONY: help sync dry-run statement serve report report-open run test media
 
 help:
 	@echo "Expense tracker targets:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make report      Generate a standalone, view-only dashboard.html"
 	@echo "  make report-open Generate and open the standalone dashboard"
 	@echo "  make test        Run the unit tests"
+	@echo "  make media       Re-record the README video and screenshots (needs node, ffmpeg)"
 
 sync:
 	$(APP) sync
@@ -38,3 +39,6 @@ run: sync
 
 test:
 	$(PYTHON) -m unittest discover -s tests -t .
+
+media:
+	PYTHON=$(PYTHON) docs/media/build.sh

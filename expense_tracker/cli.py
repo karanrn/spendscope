@@ -224,7 +224,7 @@ def run_budgets(args: argparse.Namespace) -> None:
         print(f"Budgets for {month}:")
         for label, amount, spent, only in sorted(rows, key=lambda r: -r[2] / r[1]):
             diff = spent - amount
-            state = f"{diff:,.0f} OVER" if diff > 0 else f"{-diff:,.0f} left"
+            state = f"{symbol}{diff:,.0f} OVER" if diff > 0 else f"{symbol}{-diff:,.0f} left"
             print(f"  {label}: spent {symbol}{spent:,.0f} of {symbol}{amount:,.0f}"
                   f" ({diff / amount * 100:+.0f}%, {state}){' [this month only]' if only else ''}")
     finally:

@@ -19,6 +19,7 @@ make sync       # import into SQLite
 make serve      # editable dashboard at http://127.0.0.1:8765
 make report     # static, view-only dashboard.html
 make run PYTHON=.venv/bin/python   # override the interpreter (a .venv exists locally)
+make media     # re-record docs/expense-tracker-demo.mp4 and docs/screenshots (node + ffmpeg, ~2 min)
 ```
 
 All entry points go through `python -m expense_tracker {sync,serve,report,labels,budgets}` (`expense_tracker/cli.py`). The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are thin shims kept so existing commands and cron jobs keep working. Don't put logic in them.
@@ -45,6 +46,10 @@ Pipeline: `sources.read_rows` → `parsing.to_records` → `sync.sync` → SQLit
 Naming mismatch: the DB columns `category` and `description` hold what the Sheet and dashboard call **Label** and **Item**.
 
 Library code raises `ExpenseTrackerError` for problems the user can fix. Only `cli.py` turns those into exit messages.
+
+## README media
+
+`make media` runs `docs/media/build.sh`: `make_demo.py` builds a demo project with made-up data in `docs/media/build/`, `capture.py` runs the real commands for the terminal scene, `record.mjs` (Playwright) records the terminal and a scripted dashboard tour, and `shots.mjs` takes the screenshots and thumbnail. It copies the results into `docs/` and updates the video length in README.md. The demo date is pinned (`DEMO_TODAY` in `make_demo.py`, applied to the browser clock). When dashboard features change, extend the tour in `record.mjs` (it uses element IDs from `dashboard.html`) and the video description in README.md.
 
 ## Local files not to touch or commit
 

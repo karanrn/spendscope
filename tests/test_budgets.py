@@ -61,7 +61,7 @@ class BudgetTests(unittest.TestCase):
         _, out = quietly(main, ["budgets", "set", "food", "400", "--config", config])
         self.assertIn("Budget for 'Food' for every month: ₹400", out)
         _, out = quietly(main, ["budgets", "list", "--month", "2026-01", "--config", config])
-        self.assertIn("Food: spent ₹450 of ₹400 (+12%, 50 OVER)", out)
+        self.assertIn("Food: spent ₹450 of ₹400 (+12%, ₹50 OVER)", out)
         _, out = quietly(main, ["budgets", "remove", "Food", "--config", config])
         self.assertIn("Removed the budget for 'Food' for every month.", out)
         _, out = quietly(main, ["budgets", "list", "--month", "2026-01", "--config", config])

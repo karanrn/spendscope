@@ -1,0 +1,8 @@
+{
+  "name": "expense-tracker-media",
+  "private": true,
+  "description": "Records docs/expense-tracker-demo.mp4 and docs/screenshots (make media)",
+  "dependencies": {
+    "playwright": "1.60.0"
+  }
+}
