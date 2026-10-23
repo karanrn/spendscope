@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS expense_labels (
 );
 CREATE INDEX IF NOT EXISTS idx_expense_labels_label ON expense_labels(label);
 
+CREATE TABLE IF NOT EXISTS budgets (
+    label       TEXT NOT NULL COLLATE NOCASE,   -- a Label (expenses.category)
+    month       TEXT NOT NULL DEFAULT '',       -- yyyy-mm, or '' for every month
+    amount      REAL NOT NULL CHECK (amount > 0),
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (label, month)
+);
+
 CREATE TABLE IF NOT EXISTS sync_runs (
     id          INTEGER PRIMARY KEY,
     run_at      TEXT NOT NULL,

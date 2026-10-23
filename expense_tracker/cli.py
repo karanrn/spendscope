@@ -1,12 +1,13 @@
-"""Command line: python -m expense_tracker {sync,serve,report,labels} [options]."""
+"""Command line: python -m expense_tracker {sync,serve,report,labels,budgets} [options]."""
 from __future__ import annotations
 
 import argparse
 import sys
 import webbrowser
+from datetime import date
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError, db, labels
+from expense_tracker import ExpenseTrackerError, budgets, db, labels
 from expense_tracker.config import DEFAULT_CONFIG, currency_symbol, database_path, load_config
 
 SYNC_HELP = """\
@@ -56,6 +57,18 @@ Give a Label to expenses that have none (such as bank-statement imports):
 
     python labels.py set-primary Food --item-contains swiggy
     python labels.py set-primary Petrol --item-contains "fuel" --from 2026-04-01
+"""
+
+BUDGETS_HELP = """\
+Set monthly budgets per Label. The dashboard flags Labels that go over.
+
+    python -m expense_tracker budgets set Food 8000                    # every month
+    python -m expense_tracker budgets set Travel 25000 --month 2026-12  # that month only
+    python -m expense_tracker budgets list                              # this month's budgets vs spend
+    python -m expense_tracker budgets list --month 2026-09
+    python -m expense_tracker budgets remove Travel --month 2026-12
+
+A budget for one month replaces the every-month budget for that month only.
 """
 
 
@@ -114,6 +127,20 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--from", dest="from_date", help="inclusive ISO date (YYYY-MM-DD)")
     a.add_argument("--to", dest="to_date", help="inclusive ISO date (YYYY-MM-DD)")
     p.set_defaults(run=run_labels)
+
+    p = commands.add_parser("budgets", parents=[common], description=BUDGETS_HELP, formatter_class=raw,
+                            help="set monthly budgets per Label")
+    actions = p.add_subparsers(dest="action", required=True)
+    a = actions.add_parser("list", parents=[nested], help="show budgets against spending for a month")
+    a.add_argument("--month", help="YYYY-MM (default: the current month)")
+    a = actions.add_parser("set", parents=[nested], help="set a Label's monthly budget")
+    a.add_argument("label", help="Label to budget")
+    a.add_argument("amount", help="budget amount for a month")
+    a.add_argument("--month", default="", help="YYYY-MM to budget only that month (default: every month)")
+    a = actions.add_parser("remove", parents=[nested], help="remove a Label's budget")
+    a.add_argument("label", help="Label whose budget to remove")
+    a.add_argument("--month", default="", help="YYYY-MM to remove only that month's budget")
+    p.set_defaults(run=run_budgets)
     return parser
 
 
@@ -170,6 +197,36 @@ def run_labels(args: argparse.Namespace) -> None:
         else:
             changed = labels.remove_label(con, ids, label)
             print(f"Removed {label!r} from {changed} of {len(ids)} matching expenses.")
+    finally:
+        con.close()
+
+
+def run_budgets(args: argparse.Namespace) -> None:
+    cfg = load_config(args.config)
+    symbol = currency_symbol(cfg)
+    con = db.connect(database_path(cfg))
+    try:
+        when = f"for {args.month}" if args.month else "for every month"
+        if args.action == "set":
+            label = budgets.set_budget(con, args.label, args.amount, args.month)
+            print(f"Budget for {label!r} {when}: {symbol}{budgets.clean_amount(args.amount):,.0f}")
+            return
+        if args.action == "remove":
+            removed = budgets.remove_budget(con, args.label, args.month)
+            print(f"Removed the budget for {args.label!r} {when}." if removed
+                  else f"No budget for {args.label!r} {when}.")
+            return
+        month = budgets.clean_month(args.month) or date.today().strftime("%Y-%m")
+        rows = budgets.month_status(con, month)
+        if not rows:
+            print(f"No budgets in effect for {month}.")
+            return
+        print(f"Budgets for {month}:")
+        for label, amount, spent, only in sorted(rows, key=lambda r: -r[2] / r[1]):
+            diff = spent - amount
+            state = f"{diff:,.0f} OVER" if diff > 0 else f"{-diff:,.0f} left"
+            print(f"  {label}: spent {symbol}{spent:,.0f} of {symbol}{amount:,.0f}"
+                  f" ({diff / amount * 100:+.0f}%, {state}){' [this month only]' if only else ''}")
     finally:
         con.close()
 

@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from expense_tracker import db
+from expense_tracker.budgets import all_budgets
 from expense_tracker.labels import MISSING_LABELS
 
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "dashboard.html"
@@ -26,9 +27,11 @@ def load(db_path: Path) -> dict:
                 "SELECT expense_id, label FROM expense_labels ORDER BY label COLLATE NOCASE"):
             labels.setdefault(expense_id, []).append(label)
         last = con.execute("SELECT run_at FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
+        budgets = all_budgets(con)
     finally:
         con.close()
     return {"rows": [row[1:] + (labels.get(row[0], []), row[0]) for row in rows],
+            "budgets": budgets,
             "lastSync": last[0] if last else None,
             "generated": datetime.now().isoformat(timespec="minutes")}
 

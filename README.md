@@ -111,6 +111,7 @@ The database contains:
 
 - `expenses`: transaction date, `month` (`YYYY-MM`), `year` (calendar year), amount, source Label, Item, optional fields, and import metadata. The year is derived from the transaction date and backfilled automatically for existing databases.
 - `expense_labels`: additional labels attached to expense records; they remain separate from the workbook’s original Label.
+- `budgets`: monthly budgets per Label, for every month or for one month.
 - `sync_runs`: history and counts for each successful sync.
 
 ## Incremental sync and corrections
@@ -168,6 +169,22 @@ An existing Label matching case-insensitively keeps its spelling, so `food` join
 
 Label matching is case-insensitive; Item matching is case-insensitive substring search. Dates use `YYYY-MM-DD`. Assignments are stored in SQLite, survive restarts and later syncs, and can be selected in the dashboard’s Additional label filter. Existing workbook Labels remain unchanged.
 
+## Monthly budgets per Label
+
+Give any Label a monthly budget. The dashboard's **Budgets** card shows, for the chosen month (by default the last month in the selected range), each budgeted Label's budget, its spend, how far over or under it is, and that difference as a percentage of the budget. Labels over budget are highlighted in the table and listed in a banner under the filters. In the month still under way, a tick on each bar marks how far through the month you are. Budgets count every expense in the month, whatever the payment, Label or additional-label filters are set to.
+
+In `serve.py`, add a budget with the form under the table, or use **edit** and **×** on a row. From the command line:
+
+```bash
+python -m expense_tracker budgets set Food 8000                    # every month
+python -m expense_tracker budgets set Travel 25000 --month 2026-12  # December 2026 only
+python -m expense_tracker budgets list                              # this month: budget vs spend
+python -m expense_tracker budgets list --month 2026-09
+python -m expense_tracker budgets remove Travel --month 2026-12
+```
+
+A budget for one month replaces the every-month budget in that month only. Label names match case-insensitively and keep the existing Label's spelling. Expenses without a Label can't be budgeted.
+
 ## Search Items and query SQLite
 
 The dashboard search box searches Item text, source Label, payment, and added labels; entering part of an Item name filters matching transactions. You can also query the database directly (with the `sqlite3` command-line program):
@@ -223,7 +240,7 @@ The code lives in the `expense_tracker` package, one module per job. The top-lev
 
 ```
 expense_tracker/
-  cli.py        command line: sync | serve | report | labels {list,add,remove}
+  cli.py        command line: sync | serve | report | labels {list,add,remove} | budgets {list,set,remove}
   config.py     reads config.toml; relative paths resolve against the config file
   sources.py    Google Sheets API, public CSV/XLSX export, local .xlsx/.csv
   statements.py bank statements (.xls/.xlsx/.txt) → unlabeled withdrawal records
@@ -231,8 +248,9 @@ expense_tracker/
   sync.py       incremental / full-rescan / mirror import, statement import, sheet↔bank matching
   db.py         SQLite schema, migrations, connection settings
   labels.py     additional-label operations shared by the CLI and the server
+  budgets.py    monthly budgets per Label, shared by the CLI and the server
   report.py     dashboard data and HTML rendering
-  server.py     local dashboard server and /api/labels
+  server.py     local dashboard server, /api/labels and /api/budgets
   templates/dashboard.html
 tests/          unittest suite (standard library only)
 ```

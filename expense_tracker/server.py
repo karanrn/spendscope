@@ -1,4 +1,4 @@
-"""Local dashboard server with an API for editing additional labels and missing Labels."""
+"""Local dashboard server with an API for editing additional labels, missing Labels and budgets."""
 from __future__ import annotations
 
 import errno
@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from expense_tracker import ExpenseTrackerError, db, labels
+from expense_tracker import ExpenseTrackerError, budgets, db, labels
 from expense_tracker.report import load, render_dashboard
 
 MAX_BODY = 8192
@@ -43,7 +43,9 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
             self._send(200, html, "text/html; charset=utf-8")
 
         def do_POST(self) -> None:
-            if urlparse(self.path).path != "/api/labels":
+            routes = {"/api/labels": self._post_labels, "/api/budgets": self._post_budgets}
+            handler = routes.get(urlparse(self.path).path)
+            if handler is None:
                 self._json(404, {"error": "Not found"})
                 return
             try:
@@ -54,36 +56,57 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
                 payload = json.loads(self.rfile.read(content_length))
                 if not isinstance(payload, dict):
                     raise ValueError("Request body must be a JSON object")
-                expense_id = payload.get("expense_id")
-                action = payload.get("action")
-                if isinstance(expense_id, bool) or not isinstance(expense_id, int) or expense_id < 1:
-                    raise ValueError("Invalid expense ID")
-                if not isinstance(payload.get("label", ""), str):
-                    raise ValueError("Label must be a string")
-                label = labels.clean_label(payload.get("label", ""))
-                if action not in ("add", "remove", "set_primary"):
-                    raise ValueError("Action must be 'add', 'remove' or 'set_primary'")
-
-                con = db.connect(db_path)
-                try:
-                    if not labels.expense_exists(con, expense_id):
-                        self._json(404, {"error": "Expense not found"})
-                        return
-                    if action == "set_primary":
-                        if not labels.set_primary_label(con, [expense_id], label):
-                            self._json(409, {"error": "This expense already has a Label"})
-                            return
-                    else:
-                        change = labels.add_label if action == "add" else labels.remove_label
-                        change(con, [expense_id], label)
-                    body = {"expense_id": expense_id, "labels": labels.labels_for(con, expense_id),
-                            "all_labels": labels.all_labels(con),
-                            "category": labels.primary_label(con, expense_id)}
-                finally:
-                    con.close()
-                self._json(200, body)
+                handler(payload)
             except (ValueError, ExpenseTrackerError, UnicodeDecodeError, sqlite3.Error) as exc:
                 self._json(400, {"error": str(exc)})
+
+        def _post_budgets(self, payload: dict) -> None:
+            """Set a Label's budget, or remove it when amount is null."""
+            label, amount, month = payload.get("label"), payload.get("amount"), payload.get("month", "")
+            if not isinstance(label, str):
+                raise ValueError("Label must be a string")
+            if not isinstance(month, str):
+                raise ValueError("Month must be a string")
+            con = db.connect(db_path)
+            try:
+                if amount is None:
+                    budgets.remove_budget(con, label, month)
+                else:
+                    label = budgets.set_budget(con, label, amount, month)
+                body = {"label": label, "budgets": budgets.all_budgets(con)}
+            finally:
+                con.close()
+            self._json(200, body)
+
+        def _post_labels(self, payload: dict) -> None:
+            expense_id = payload.get("expense_id")
+            action = payload.get("action")
+            if isinstance(expense_id, bool) or not isinstance(expense_id, int) or expense_id < 1:
+                raise ValueError("Invalid expense ID")
+            if not isinstance(payload.get("label", ""), str):
+                raise ValueError("Label must be a string")
+            label = labels.clean_label(payload.get("label", ""))
+            if action not in ("add", "remove", "set_primary"):
+                raise ValueError("Action must be 'add', 'remove' or 'set_primary'")
+
+            con = db.connect(db_path)
+            try:
+                if not labels.expense_exists(con, expense_id):
+                    self._json(404, {"error": "Expense not found"})
+                    return
+                if action == "set_primary":
+                    if not labels.set_primary_label(con, [expense_id], label):
+                        self._json(409, {"error": "This expense already has a Label"})
+                        return
+                else:
+                    change = labels.add_label if action == "add" else labels.remove_label
+                    change(con, [expense_id], label)
+                body = {"expense_id": expense_id, "labels": labels.labels_for(con, expense_id),
+                        "all_labels": labels.all_labels(con),
+                        "category": labels.primary_label(con, expense_id)}
+            finally:
+                con.close()
+            self._json(200, body)
 
         def log_message(self, fmt: str, *args: object) -> None:
             print(f"{self.log_date_time_string()} {fmt % args}")

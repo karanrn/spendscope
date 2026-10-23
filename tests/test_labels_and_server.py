@@ -66,8 +66,8 @@ class ServerTests(unittest.TestCase):
         self.server.server_close()
         self.project.cleanup()
 
-    def post(self, payload):
-        req = urllib.request.Request(f"{self.base}/api/labels", data=json.dumps(payload).encode(),
+    def post(self, payload, path="/api/labels"):
+        req = urllib.request.Request(f"{self.base}{path}", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req) as res:
@@ -95,6 +95,23 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((status, body["category"]), (200, "Investment"))
         self.assertEqual(self.post({"expense_id": 4, "label": "Other", "action": "set_primary"})[0], 409)
         self.assertEqual(self.post({"expense_id": 1, "label": "Other", "action": "set_primary"})[0], 409)
+
+    def test_set_and_remove_budget(self):
+        status, body = self.post({"label": "food", "amount": 400}, "/api/budgets")
+        self.assertEqual((status, body["label"], body["budgets"]), (200, "Food", [["Food", "", 400.0]]))
+        status, body = self.post({"label": "Food", "amount": 900, "month": "2026-01"}, "/api/budgets")
+        self.assertEqual(body["budgets"], [["Food", "", 400.0], ["Food", "2026-01", 900.0]])
+        status, body = self.post({"label": "Food", "amount": None}, "/api/budgets")
+        self.assertEqual((status, body["budgets"]), (200, [["Food", "2026-01", 900.0]]))
+        with urllib.request.urlopen(self.base + "/") as res:
+            self.assertIn('"budgets":[["Food","2026-01",900.0]]', res.read().decode())
+
+    def test_bad_budget_requests(self):
+        for payload in ({"label": "Food", "amount": 0}, {"label": "Food", "amount": "x"},
+                        {"label": 5, "amount": 10}, {"label": "Food", "amount": 10, "month": "2026-1"},
+                        {"label": "Food", "amount": 10, "month": 202601}, {"label": "", "amount": 10}):
+            self.assertEqual(self.post(payload, "/api/budgets")[0], 400, payload)
+        self.assertEqual(self.post({"label": "Food", "amount": 10}, "/api/nope")[0], 404)
 
     def test_bad_requests(self):
         self.assertEqual(self.post({"expense_id": 999, "label": "X", "action": "add"})[0], 404)
