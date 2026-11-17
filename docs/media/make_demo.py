@@ -123,14 +123,14 @@ for (d, amt), item in sorted(oct_sheet.items()):
     if item in ("Rent", "SIP - index fund", "Electricity bill", "Internet", "Diwali shopping", "DMart monthly stock-up"):
         narration = {"Rent": "NEFT DR-LANDLORD-RENT OCT", "SIP - index fund": "ACH D- ICICI PRU MF-SIP",
                      "Electricity bill": "BILLPAY-BESCOM", "Internet": "BILLPAY-ACT FIBERNET",
-                     "Diwali shopping": "POS 416021XXXXXX7960 LIFESTYLE", "DMart monthly stock-up": "POS 416021XXXXXX7960 DMART"}[item]
+                     "Diwali shopping": "POS 400000XXXXXX0001 LIFESTYLE", "DMart monthly stock-up": "POS 400000XXXXXX0001 DMART"}[item]
         txns.append((d, narration, amt, 0))
 txns += [
     (date(2026, 10, 4), "UPI-GROWW-ADD MONEY-PAYMENT", 5000, 0),
     (date(2026, 10, 7), "ATM WDL-ATM CASH KORAMANGALA", 3000, 0),
     (date(2026, 10, 9), "UPI-ZEPTO MARKETPLACE-ORDER", 742.5, 0),
     (date(2026, 10, 11), "UPI-A FRIEND-SPLIT DINNER", 0, 1200),
-    (date(2026, 10, 13), "POS 416021XXXXXX7960 AMAZON PAY", 1299, 0),
+    (date(2026, 10, 13), "POS 400000XXXXXX0001 AMAZON PAY", 1299, 0),
     (date(2026, 10, 15), "NEFT DR-PRESTIGE SOCIETY-MAINTENANCE", 2500, 0),
     (date(2026, 10, 18), "UPI-GROWW-ADD MONEY-PAYMENT", 5000, 0),
     (date(2026, 10, 19), "UPI-BLINKIT-ORDER", 389, 0),

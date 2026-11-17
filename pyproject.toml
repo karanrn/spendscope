@@ -4,11 +4,17 @@ version = "0.1.0"
 description = "Import yearly Google Sheets expenses into SQLite and explore them in a local dashboard"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "karanrn" }]
+keywords = ["expenses", "google-sheets", "sqlite", "dashboard", "bank-statements"]
 dependencies = [
     "openpyxl>=3.1,<4",
     "gspread>=6.0,<7",
     "xlrd>=2.0,<3",
 ]
+
+[project.urls]
+Repository = "https://github.com/karanrn/expense-tracker"
 
 [project.scripts]
 expense-tracker = "expense_tracker.cli:main"

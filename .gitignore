@@ -13,3 +13,10 @@ __pycache__/
 
 # Bank statements (personal account data)
 Acct_Statement_*
+
+# Bank statements from any bank: keep them out of the repo (a statements/ folder is ignored)
+statements/
+*.xls
+*.xlsx
+*.xlsm
+!Template - Expenses 2026.xlsx

@@ -14,10 +14,31 @@ from expense_tracker import ExpenseTrackerError, budgets, db, labels
 from expense_tracker.report import load, render_dashboard
 
 MAX_BODY = 8192
+LOOPBACK_NAMES = ("127.0.0.1", "localhost", "[::1]")
+
+
+def allowed_hosts(host: str, port: int) -> set[str]:
+    """Host header values this server answers to: loopback names, plus an explicit bind address."""
+    names = set(LOOPBACK_NAMES)
+    if host not in ("", "0.0.0.0", "::"):
+        names.add(f"[{host}]" if ":" in host else host)
+    return {f"{name}:{port}" for name in names}
 
 
 def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
+        def _host_allowed(self) -> bool:
+            """Reject other Host names, so a DNS-rebinding page can't read or change the data."""
+            host, port = self.server.server_address[:2]
+            return (self.headers.get("Host") or "").lower() in allowed_hosts(host, port)
+
+        def _same_origin_json(self) -> bool:
+            """Writes must be JSON from this page; other sites can't send that without a CORS preflight."""
+            content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            origin = self.headers.get("Origin")
+            return content_type == "application/json" and (
+                origin is None or origin.lower() == f"http://{self.headers.get('Host', '').lower()}")
+
         def _send(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -32,6 +53,9 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
                        "application/json; charset=utf-8")
 
         def do_GET(self) -> None:
+            if not self._host_allowed():
+                self._json(403, {"error": "Unexpected Host header"})
+                return
             if urlparse(self.path).path not in ("/", "/index.html"):
                 self._json(404, {"error": "Not found"})
                 return
@@ -43,6 +67,9 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
             self._send(200, html, "text/html; charset=utf-8")
 
         def do_POST(self) -> None:
+            if not self._host_allowed() or not self._same_origin_json():
+                self._json(403, {"error": "Requests must be JSON from the dashboard page"})
+                return
             routes = {"/api/labels": self._post_labels, "/api/budgets": self._post_budgets}
             handler = routes.get(urlparse(self.path).path)
             if handler is None:

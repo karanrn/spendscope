@@ -1,280 +1,160 @@
 # Expense tracker: Google Sheets → SQLite → dashboard
 
-This project imports all accessible yearly Google spreadsheets whose titles match `Expenses YYYY` (for example, `Expenses 2025`), with one expense worksheet per month, into a durable SQLite database and builds a searchable dashboard.
+[![test](https://github.com/karanrn/expense-tracker/actions/workflows/test.yml/badge.svg)](https://github.com/karanrn/expense-tracker/actions/workflows/test.yml)
 
-- `sync.py` reads every monthly worksheet through the Google Sheets API by default, imports transactions, and skips summary/formula rows that do not match the expense columns. If API access is unavailable, it attempts to download the whole spreadsheet as XLSX and parse all tabs (requires the spreadsheet to be publicly viewable).
-- `sync.py --statement FILE…` imports withdrawals from bank account statements (HDFC-style `.xls` or comma-delimited `.txt`) without a Label, skipping ones already stored or already entered in the sheet. See [Bank statements](#bank-statements).
-- `report.py` builds `dashboard.html` with monthly totals, a monthly trend per Label or additional label, Label and payment breakdowns, a searchable transaction list with a month picker, and date/Label/payment/additional-label filters.
-- `serve.py` runs the dashboard locally with controls to add/remove additional labels on each transaction; changes are written to SQLite immediately.
-- `labels.py` attaches your own extra labels to transactions without changing the workbook’s existing Label values.
-- `python -m expense_tracker budgets` sets monthly budgets per Label; the dashboard flags Labels over budget and shows how far over or under each one is. See [Monthly budgets per Label](#monthly-budgets-per-label).
+Keep your expenses in a yearly Google Sheet (`Expenses 2026`, one tab per month), and this tool imports them into a local SQLite database and shows them in a searchable dashboard. Bank statements can be imported too, and matched against what you already entered in the sheet.
 
-### Walkthrough video
+- **Sync** every yearly workbook incrementally, without duplicating rows on repeat runs.
+- **Import bank statements** (`.xls`, `.xlsx`, `.txt`, `.csv`) from any bank. Withdrawals the sheet already records are skipped.
+- **Explore** your spending with monthly totals, a trend per Label, breakdowns, search and filters.
+- **Label** transactions with your own extra tags, and give a Label to bank rows that have none.
+- **Budget** per Label per month, and see which Labels are over budget.
+
+Everything stays on your machine. Defaults are set for India (`₹`, day-first dates), and both can be changed in `config.toml`.
 
 [![Walkthrough: dry run, sync, bank statement import, labels and budgets from the command line, then a tour of the dashboard](docs/screenshots/walkthrough-thumbnail.jpg)](docs/expense-tracker-demo.mp4)
 
-[Watch the 106-second walkthrough (MP4)](docs/expense-tracker-demo.mp4). In the terminal it runs `make dry-run`, `make sync`, `make statement`, `labels.py` (adding labels and giving bank rows a Label) and `budgets` (setting and listing budgets), then `make serve`. The dashboard tour covers the over-budget banner, the Budgets card (stepping through months, adding a budget for one month), date ranges, Label filters, the monthly charts and trend, transaction search, adding an additional label, setting the Label on a bank-statement row, and filtering by additional label.
-
-### Screenshots
-
-![Dashboard overview: over-budget banner, totals, budgets, monthly spend by category, and category breakdown](docs/screenshots/dashboard-overview.png)
+[Watch the 107-second walkthrough (MP4)](docs/expense-tracker-demo.mp4): sync, statement import, labels and budgets from the command line, then a tour of the dashboard.
 
 | Budgets per Label | Monthly trend per Label |
 |---|---|
 | ![Budgets for October: Misc and Grocery over budget, with the difference, the percentage and a usage bar per Label](docs/screenshots/budgets.png) | ![Monthly trend by label with totals, averages and last month vs average](docs/screenshots/trend-by-label.png) |
-
-| Searchable transactions with additional labels | Bank-statement rows waiting for a Label |
-|---|---|
+| **Searchable transactions with additional labels** | **Bank-statement rows waiting for a Label** |
 | ![Transactions filtered to September and searched for “swiggy”, with an added Weekend label](docs/screenshots/transactions.png) | ![Unlabeled bank-statement withdrawals, each with a Set Label box](docs/screenshots/unlabeled.png) |
 
-_Screenshots and video use made-up data entered into the [template](#google-sheet-template), plus a made-up bank statement._
+_The video and screenshots use made-up data._
 
-The expected transaction columns on each month sheet are:
+## Quickstart
+
+You need Python 3.11 or newer.
+
+```bash
+git clone https://github.com/karanrn/expense-tracker && cd expense-tracker
+python -m pip install -r requirements.txt
+```
+
+To try it without Google, point `config.toml` at a local copy of the template. Set `[source] type = "file"` and `file_path = "Template - Expenses 2026.xlsx"`, add a few rows, then run:
+
+```bash
+make dry-run    # preview what would be imported
+make run        # import, then open the dashboard at http://127.0.0.1:8765
+```
+
+## Your sheet
+
+Each month tab needs these columns. Header matching ignores case, and a unit suffix like `Expense(INR)` still counts:
 
 | Date | Expense | Item | Label |
 |---|---:|---|---|
-| 2025-01-02 | 450 | Coffee and sandwich | Food |
+| 1/2 | 450 | Coffee and sandwich | Food |
 
-Header unit suffixes such as `Expense(INR)` are accepted as `Expense`. Sheets API dates formatted as `M/D` without a year are interpreted as month/day and get the year from the parent `Expenses YYYY` spreadsheet. Worksheets named in `source.skip_worksheets` (default `Summary`) are not read. Side panels next to the expense columns (such as a monthly `Total` cell) are ignored, so the expense on the same row is still imported. Zero-amount rows are skipped. Rows that look like expenses but have an unreadable date or amount are written to `parse_failures.csv` (`parsing.failures_log`), which is overwritten on every sync.
+[`Template - Expenses 2026.xlsx`](Template%20-%20Expenses%202026.xlsx) has this layout, with twelve month tabs (`Jan26` … `Dec26`), a Label dropdown, per-month totals in columns F–G, and a yearly `Summary` tab. To use it, upload it to Google Drive, open it, choose **File → Save as Google Sheets** (the formulas need Sheets), and name it `Expenses 2026`.
 
-## Google Sheet template
+- **Ignored rows and tabs:** side panels, totals, zero-amount rows and the `Summary` tab (`skip_worksheets`) are never imported.
+- **Dates without a year:** dates written `M/D` take their year from the workbook title.
+- **Unreadable rows:** rows that look like expenses but won't parse go to `parse_failures.csv`.
+- **Labels:** these are free text. Add new ones to the dropdown and the F–G formulas if you want the totals inside the sheet to include them.
+- **Other column names:** map your own headers under `[columns]` in `config.toml`.
 
-[`Template - Expenses 2026.xlsx`](Template%20-%20Expenses%202026.xlsx) is a ready-made yearly workbook in the layout `sync.py` expects. To use it:
+## Connecting Google Sheets
 
-1. In Google Drive, choose **New → File upload**, upload the template, then open it and choose **File → Save as Google Sheets**. (The month-sheet formulas use Google Sheets’ `FILTER`, so they only calculate correctly once converted.)
-2. Rename the Google Sheet to `Expenses YYYY` (for example, `Expenses 2026`) so Drive discovery matches `spreadsheet_title_pattern`.
-3. Share it as a Viewer with the Google account you authorize in Setup.
-4. For a new year, make a copy, rename it and its tabs (`Jan27`, …), and update the tab names in the `Summary` formulas.
+1. **Create the OAuth client:** in a Google Cloud project, enable the **Google Sheets API** and the **Google Drive API**, set up the OAuth consent screen, and create an **OAuth client ID** of type **Desktop app**.
+2. **Point the config at it:** save the downloaded JSON in the project folder and set `oauth_client_json` to its filename. The default is `service_account.json`, but this is an OAuth client file, not a service-account key.
+3. **Share and sync:** share each `Expenses YYYY` sheet with your Google account as a Viewer, then run `make sync`. The first run opens a browser to authorize access (read-only), and the token is cached in `authorized_user.json`.
 
-### Month tabs (`Jan26` … `Dec26`)
+New yearly sheets are found automatically by title (`spreadsheet_title_pattern`). To narrow discovery, use `folder_id`; to read one workbook directly, use `sheet_id`.
 
-One tab per month. Columns A–D hold the transactions that get imported:
+The OAuth client file and the token are gitignored. Never commit or share them. If they leak, revoke the client in Google Cloud and authorize again.
 
-| Column | Header | What to enter |
-|---|---|---|
-| A | `Date` | Transaction date. The cells are formatted `m/d`; the year comes from the spreadsheet title. |
-| B | `Expense(INR)` | Amount as a number. |
-| C | `Item` | Free-text description (searchable in the dashboard). |
-| D | `Label` | Pick from the dropdown: `Food`, `Rent and bills`, `Investment`, `Essential`, `Grocery`, `Misc`, `Petrol`. |
+**Other sources.** These are set under `[source]` in `config.toml`:
+- `type = "file"` reads a local `.xlsx` or `.csv` file.
+- `type = "gsheet_csv"` reads a publicly viewable sheet through `sheet_url`, with no credentials.
 
-Columns F–G are a per-month summary panel for use inside the sheet; `sync.py` ignores them:
+## Usage
 
-| Row | F | G |
-|---|---|---|
-| 1 | Month | Month name |
-| 2 | Total | Sum of all expenses (`B2:B79`) |
-| 3 | Investments | Sum where Label = `Investment` |
-| 4 | Rent and bills | Sum where Label = `Rent and bills` |
-| 5 | Food (Swiggy) | Sum where Label = `Food` |
-| 6 | Grocery and essentials | Sum where Label = `Grocery` or `Essential` |
-| 7 | Miscellaneous | Sum where Label = `Misc` |
-| 8 | Petrol | Sum where Label = `Petrol` |
-| 9 | Expenses | Rows 4–8, i.e. spending excluding investments |
+All commands run through `python -m expense_tracker …`. The Makefile targets wrap the common ones (`make help` lists them), and `make run PYTHON=.venv/bin/python` picks the interpreter.
 
-The Label dropdown and the Total formula cover roughly the first 78 transaction rows (the per-label sums go to row 86). If a month has more entries, extend the data validation and the formula ranges.
-
-### `Summary` tab
-
-A yearly roll-up (cells B30:E37) built from each month tab’s G column: Total per label across all twelve months, Share % of total expenses, and Monthly Avg. Monthly Avg divides by a fixed `8`; change that divisor to the number of months elapsed. The tab is listed in `source.skip_worksheets`, so it is never imported.
-
-### Adding or renaming labels
-
-Labels are free text as far as `sync.py` is concerned — any value in column D is imported as the transaction’s Label and appears in the dashboard. To keep the in-sheet totals accurate, add the new value to the column D dropdown (**Data → Data validation**) on each month tab, and add matching `FILTER` rows in column F–G and in `Summary` if you want it totalled there.
-
-## Setup
-
-1. In the same Google Cloud project, enable both the **Google Sheets API** and the **Google Drive API**, configure the OAuth consent screen, and create an OAuth Client ID for a **Desktop app**. Drive API is used to discover spreadsheets by title. Save the downloaded client JSON in the project folder. The supplied `service_account.json` is an installed-app OAuth client file, not a service-account key or an OAuth access token.
-2. Install the API client and workbook reader (Python 3.11+):
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
-3. Set `oauth_client_json` to the downloaded OAuth client file and `oauth_token_json` to a writable path for the cached token (defaults to `authorized_user.json`). The first sync opens a browser for you to authorize the Google account. Share each yearly spreadsheet with that same account as a Viewer.
-4. The default `spreadsheet_title_pattern` discovers every accessible spreadsheet titled `Expenses YYYY`; leave it as-is for that naming convention. Optionally set `folder_id` to limit discovery to a Drive folder. Leave `worksheet = ""` to import every month tab in every matching yearly file. If Drive title discovery is unavailable, set `sheet_id` to a specific spreadsheet ID to use Sheets API access without Drive discovery. `sheet_url` also enables public XLSX fallback for that one workbook; public sharing is required for that fallback.
-5. Check parsing, import data, and build the dashboard:
-   ```bash
-   make dry-run
-   make run
-   ```
-
-You can also run `make sync` to import without opening the UI, or `make serve` to start the dashboard against the existing database. Set `PYTHON` when needed, for example `make run PYTHON=.venv/bin/python`.
-
-The default `config.toml` uses read-only OAuth access to Google Sheets and maps Date → date, Expense → amount, Item → transaction item/description, and Label → the existing expense label. The OAuth user token is cached locally so later syncs (including scheduled ones) can refresh authorization without a service account. New annual spreadsheets are picked up automatically when shared with the authorized Google account and titled `Expenses YYYY`. To change the naming convention, edit `spreadsheet_title_pattern`. To import a local workbook or CSV instead, change `[source].type` to `"file"`; see “Other sources” below.
-
-`serve.py` opens the editable dashboard at `http://127.0.0.1:8765`. On each transaction, type a custom label and choose **Add**; click an existing custom-label chip to remove it. Changes are saved immediately to the configured SQLite database and reflected in the dashboard filters. Keep the server bound to localhost; it is intended for personal use.
-
-`report.py` is the static-export alternative: it writes a standalone `dashboard.html` snapshot that can be archived, copied, or served by a static web host. It has no server/API connection, so it is view-only and label edits are disabled. `serve.py` renders the dashboard dynamically and adds the local API needed to persist label edits; you do not need to run `report.py` for normal interactive use. Use `make report` or `make report-open` when you specifically need the static snapshot.
-
-Do not commit or share OAuth client files or the cached token. The downloaded client file is not itself the user authorization token; `gspread` writes that token to `oauth_token_json` after the first browser login. If credentials have been exposed, revoke/rotate the OAuth client in Google Cloud and authorize again.
-
-## Durable database and restart recovery
-
-`expenses.db` is a regular SQLite database file on disk, not temporary/in-memory storage. On startup, `sync.py` creates the configured parent directory, opens or creates the database, creates the tables and indexes, and applies additive schema changes needed by newer versions. SQLite uses a write-ahead log, foreign keys, a busy timeout, and full synchronous commits. Committed expenses and added labels therefore remain available after the script exits or the computer restarts.
-
-Keep `expenses.db` (and, while a sync is active, its SQLite `-wal`/`-shm` files) on persistent local storage. For backups, use SQLite’s backup feature or copy the database while scripts are stopped; do not store the database in a temporary directory.
-
-The database contains:
-
-- `expenses`: transaction date, `month` (`YYYY-MM`), `year` (calendar year), amount, source Label, Item, optional fields, and import metadata. The year is derived from the transaction date and backfilled automatically for existing databases.
-- `expense_labels`: additional labels attached to expense records; they remain separate from the workbook’s original Label.
-- `budgets`: monthly budgets per Label, for every month or for one month.
-- `sync_runs`: history and counts for each successful sync.
-
-## Incremental sync and corrections
-
-Every regular run reads the source and imports transactions from the **latest date already stored in the database onward**. The boundary date is included, so more expenses added on that same date are still picked up. Rows before that date are not re-imported during a regular run. On a brand-new database, the full workbook is imported.
-
-If you add a late expense with an older date or need to rescan the full history, run:
+### Sync
 
 ```bash
-python sync.py --full-rescan
+make sync                                       # incremental: from the latest date already stored
+python -m expense_tracker sync --dry-run        # preview, write nothing
+python -m expense_tracker sync --full-rescan    # pick up late entries with older dates
+python -m expense_tracker sync --mirror         # also delete rows that are no longer in the sheet
 ```
 
-Identical transactions on the same date are retained by occurrence, while repeating a sync does not duplicate them. A changed transaction is treated as a new version by default; the old version remains. `--mirror` instead rescans the full source and removes database rows within the source’s covered date range that no longer match it. Use mirror only when the source is authoritative for that whole date range; user-added secondary labels for removed transactions go away with those transactions.
+- **Repeat syncs:** running a sync again never duplicates rows, and identical same-day transactions are kept separately.
+- **Edited rows:** an edited sheet row is imported as a new row, and the old one stays. Use `--mirror` only when the sheet is the complete record for its date range, because mirror deletes rows that are gone from the sheet, along with their additional labels.
 
-`--dry-run` reports what would be inserted without writing. It may initialize an empty database/schema so the configured path can be checked, but it does not save transactions or a sync-history row.
-
-## Bank statements
-
-Bank account statements can be imported alongside, or instead of, the Google Sheet:
+### Bank statements
 
 ```bash
-python sync.py --statement Acct_Statement_XXXXXXXX5898_15102026.xls
-python sync.py --statement statements/*.txt --dry-run   # preview only
-make statement FILES="statements/*.xls"
+python -m expense_tracker sync --statement statements/Acct_Statement_2026-10.xls
+make statement FILES='statements/*.txt'
 ```
 
-- **Formats:** spreadsheet exports (`.xls`, needs `xlrd`, included in `requirements.txt`; `.xlsx`), HTML tables saved with an `.xls` name, and delimited text (`.txt`/`.csv`, comma, tab, semicolon or pipe). The address block, separator lines and summary above and below the transactions are ignored, and narrations wrapped onto the next line are joined.
-- **Headers from any bank:** the transaction header row is found by matching each column name against common spellings, for example `Date`/`Txn Date`/`Transaction Date`, `Narration`/`Description`/`Particulars`/`Remarks`, `Withdrawal Amt.`/`Debit`/`DR`, `Deposit Amt.`/`Credit`/`CR`, `Closing Balance`/`BAL`, and `Chq./Ref.No.`. A single `Amount` column also works, with a `Dr/Cr` column, a `Dr`/`Cr` suffix, or negative numbers for money out. Dates are read day-first (`01/04/26`, `01-04-2026`, `1 Apr 2026`, with or without a time). If a statement is still rejected, the error shows the closest header row; name its columns under `[statements.columns]` in `config.toml` (and add formats to `[statements] date_formats` if needed).
-- **What is stored:** each withdrawal becomes an expense with the narration as Item and the channel (UPI, Card, ACH, NEFT, IMPS, …) as Payment. The reference number, value date and closing balance are kept in `extra`. Deposits (salary, refunds, money received) are skipped.
-- **No Label:** statement rows are stored without a Label and show as *Unlabeled* in the dashboard. Set one per transaction with the **Set Label** box in `serve.py`, or in bulk with `labels.py set-primary` (below). Only expenses without a Label can be changed this way; sheet rows keep the workbook's Label.
-- **Duplicates:** a transaction is identified by its date, reference number, amount and closing balance, so the `.xls` and `.txt` exports of one statement, overlapping statements, and repeated imports never store it twice.
-- **Sheet and statement together:** a withdrawal with the same date and amount (to the rupee) as a sheet row is treated as that sheet row and is not stored. If the statement was imported first, the next sheet sync replaces the matching bank row with the sheet row and moves its additional labels over. Spend the sheet records differently from the bank (one combined “SIPs” entry for several debits, a different date) cannot be matched and appears twice; give those bank rows a Label or leave them for review.
+- **What's imported:** only withdrawals. Each becomes an expense with the narration as Item, the channel (UPI, Card, NEFT, …) as Payment, and no Label.
+- **Duplicates:** the same transaction is never stored twice, even across overlapping statements or the `.xls` and `.txt` exports of one statement.
+- **Matching the sheet:** a withdrawal with the same date and whole-rupee amount as a sheet row is treated as that row, and the sheet wins. If the statement came first, the next sheet sync replaces the bank row.
+- **Headers:** column names are recognized across banks (`Txn Date`, `Narration`/`Particulars`, `Withdrawal Amt.`/`Debit`, a single signed `Amount`, …). If a statement is still rejected, the error shows the closest header row; name its columns under `[statements.columns]`.
 
-`--mirror` and `--full-rescan` apply to the sheet only; incremental sheet syncs start from the latest *sheet* date, so importing a newer statement does not hide older sheet entries.
+`statements/` and spreadsheet files are gitignored, so keep statements there.
 
-## Add secondary labels to existing Labels
+### Labels and budgets
 
-For individual transactions, use the editable dashboard described above. To bulk-assign labels from the command line, use `labels.py` without replacing the workbook Label. Match by existing Label, and optionally narrow the selection by text contained in Item and by date range:
+Additional labels are your own tags and leave the sheet's Label unchanged. A Label can only be set on rows that have none, such as bank imports.
 
 ```bash
-python labels.py add Work --source-label Food --item-contains coffee
-python labels.py add Reimbursable --source-label Travel --from 2025-01-01 --to 2025-12-31
-python labels.py list
-python labels.py remove Work --source-label Food --item-contains coffee
-```
+python -m expense_tracker labels add Work --source-label Food --item-contains coffee
+python -m expense_tracker labels set-primary Food --item-contains swiggy --from 2026-04-01
+python -m expense_tracker labels list
 
-To set the Label itself on expenses that have none (bank-statement imports, or sheet rows with an empty Label), match by Item text and dates:
-
-```bash
-python labels.py set-primary Food --item-contains swiggy
-python labels.py set-primary Investment --item-contains groww --from 2026-04-01
-```
-
-An existing Label matching case-insensitively keeps its spelling, so `food` joins `Food`. `labels.py list` also reports how many expenses still have no Label.
-
-Label matching is case-insensitive; Item matching is case-insensitive substring search. Dates use `YYYY-MM-DD`. Assignments are stored in SQLite, survive restarts and later syncs, and can be selected in the dashboard’s Additional label filter. Existing workbook Labels remain unchanged.
-
-## Monthly budgets per Label
-
-Give any Label a monthly budget. The dashboard's **Budgets** card shows, for the chosen month (by default the last month in the selected range), each budgeted Label's budget, its spend, how far over or under it is, and that difference as a percentage of the budget. Labels over budget are highlighted in the table and listed in a banner under the filters. In the month still under way, a tick on each bar marks how far through the month you are. Budgets count every expense in the month, whatever the payment, Label or additional-label filters are set to.
-
-In `serve.py`, add a budget with the form under the table, or use **edit** and **×** on a row. From the command line:
-
-```bash
-python -m expense_tracker budgets set Food 8000                    # every month
-python -m expense_tracker budgets set Travel 25000 --month 2026-12  # December 2026 only
-python -m expense_tracker budgets list                              # this month: budget vs spend
+python -m expense_tracker budgets set Food 8000                      # every month
+python -m expense_tracker budgets set Travel 25000 --month 2026-12   # overrides one month
 python -m expense_tracker budgets list --month 2026-09
-python -m expense_tracker budgets remove Travel --month 2026-12
 ```
 
-A budget for one month replaces the every-month budget in that month only. Label names match case-insensitively and keep the existing Label's spelling. Expenses without a Label can't be budgeted.
+Label matching ignores case, and Item matching is a case-insensitive substring search. In the dashboard, budgets count every expense in the month, whatever filters are set.
 
-## Search Items and query SQLite
+### Dashboard
 
-The dashboard search box searches Item text, source Label, payment, and added labels; entering part of an Item name filters matching transactions. You can also query the database directly (with the `sqlite3` command-line program):
+- **`make serve`** runs the editable dashboard at `http://127.0.0.1:8765`. You can add or remove labels, set missing Labels and edit budgets there, and changes save to SQLite immediately. The server only answers requests for localhost and from its own page, so other websites can't read or change your data. Keep it bound to localhost.
+- **`make report`** writes a standalone, view-only `dashboard.html` snapshot.
 
-```sql
--- Find transactions whose Item contains “coffee” (case-insensitive)
-SELECT date, amount, category AS label, description AS item
-FROM expenses
-WHERE instr(lower(coalesce(description, '')), 'coffee') > 0
-ORDER BY date DESC;
-
--- Totals by month and source Label
-SELECT month, category AS label, ROUND(SUM(amount), 2) AS spent
-FROM expenses GROUP BY month, category ORDER BY month, spent DESC;
-
--- Totals by calendar year and source Label
-SELECT year, category AS label, ROUND(SUM(amount), 2) AS spent
-FROM expenses GROUP BY year, category ORDER BY year, spent DESC;
-
--- Transactions with a specific additional label
-SELECT e.date, e.amount, e.category AS label, e.description AS item
-FROM expenses AS e
-JOIN expense_labels AS l ON l.expense_id = e.id
-WHERE l.label = 'Work' COLLATE NOCASE
-ORDER BY e.date DESC;
-
--- Recent sync history
-SELECT * FROM sync_runs ORDER BY id DESC LIMIT 5;
-```
-
-## Run it periodically
-
-On macOS/Linux, schedule sync and dashboard generation (for example, nightly at 11 pm) with `crontab -e`:
+### Scheduling
 
 ```cron
-0 23 * * * cd /path/to/expense-tracker && /usr/bin/python3 sync.py && /usr/bin/python3 report.py >> sync.log 2>&1
+0 23 * * * cd /path/to/expense-tracker && python3 -m expense_tracker sync >> sync.log 2>&1
 ```
 
-On Windows, use Task Scheduler to run `python sync.py` and then `python report.py`, with the project folder as “Start in”.
+### Querying the database
 
-## Other sources
+`expenses.db` is a plain SQLite file. In it, `category` holds the Label and `description` holds the Item.
 
-- **CSV file:** set `type = "file"` and set `file_path` to the CSV. Update `[columns]` to match its header names.
-- **Public Google Sheet without API credentials:** set `type = "gsheet_csv"` and `sheet_url` to export one tab as CSV. For the default API mode’s XLSX fallback, the spreadsheet must be publicly viewable and `sheet_id` must be configured.
-- **Google Sheets API:** the default `type = "gsheet_api"` uses the OAuth Desktop client and cached user token. The authorized Google account must have Viewer access to each yearly spreadsheet. API access works for private spreadsheets; the XLSX download fallback does not.
-- **Excel:** `.xlsx` and `.xlsm` files need `openpyxl` (included in `requirements.txt`). Set `type = "file"`, set `file_path`, and leave `file_sheet = ""` to scan all tabs.
-
-To try the included CSV sample, set `type = "file"`, set `file_path = "sample_expenses.csv"`, and change the `[columns]` mappings to Date, Amount, Category, Description, Payment Method, and (if needed) Notes before syncing.
-
-## Project layout and development
-
-The code lives in the `expense_tracker` package, one module per job. The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are three-line shortcuts for the matching `python -m expense_tracker <command>`, so existing commands and cron jobs keep working.
-
-```
-expense_tracker/
-  cli.py        command line: sync | serve | report | labels {list,add,remove} | budgets {list,set,remove}
-  config.py     reads config.toml; relative paths resolve against the config file
-  sources.py    Google Sheets API, public CSV/XLSX export, local .xlsx/.csv
-  statements.py bank statements (.xls/.xlsx/.txt) → unlabeled withdrawal records
-  parsing.py    raw rows → expense records (headers, dates, amounts, row keys)
-  sync.py       incremental / full-rescan / mirror import, statement import, sheet↔bank matching
-  db.py         SQLite schema, migrations, connection settings
-  labels.py     additional-label operations shared by the CLI and the server
-  budgets.py    monthly budgets per Label, shared by the CLI and the server
-  report.py     dashboard data and HTML rendering
-  server.py     local dashboard server, /api/labels and /api/budgets
-  templates/dashboard.html
-tests/          unittest suite (standard library only)
+```sql
+SELECT month, category AS label, ROUND(SUM(amount), 2) AS spent
+FROM expenses GROUP BY month, category ORDER BY month, spent DESC;
 ```
 
-`make media` re-records the walkthrough video and screenshots in `docs/` from made-up data, using the scripts in `docs/media/`. It needs Python with `requirements.txt` installed, Node.js with npm, and `ffmpeg`, and takes about two minutes. The first run installs Playwright into `docs/media/node_modules` (pinned by `package-lock.json`) and downloads its Chromium, so it needs a network connection and an OS that Playwright supports (macOS, Windows via WSL, or a mainstream Linux; a bare Linux may also need `npx --prefix docs/media playwright install-deps`). It builds a demo project in `docs/media/build/`, runs the real commands for the terminal scene, and drives the real dashboard on a free port, so a dashboard you are running yourself is never recorded. The demo is pinned to 23 October 2026. When the dashboard changes, update the tour in `docs/media/record.mjs` and the video description above.
+The tables are:
+- `expenses`, with `origin` set to `sheet` or `bank`
+- `expense_labels`
+- `budgets`
+- `sync_runs`
 
-Where to make common changes:
+To back the database up, copy it while nothing is running, or use `sqlite3 expenses.db ".backup copy.db"`.
 
-- **New source type:** add a reader in `sources.py` and a branch in `read_rows`.
-- **New column or parsing rule:** `parsing.py`; add a case to `tests/test_parsing.py`.
-- **Schema change:** `db.py`. Keep it additive and migrate existing databases in `initialize_database`, as the `year` column does.
-- **Dashboard UI:** `templates/dashboard.html`; its data comes from `report.load`.
-
-Library code raises `ExpenseTrackerError` for problems the user can fix; only `cli.py` turns those into an exit message.
-
-Run the tests (no extra dependencies):
+## Development
 
 ```bash
-make test        # or: python -m unittest discover -s tests -t .
+make test       # standard-library unittest suite; needs no network or credentials
+pip install -e .   # optional: adds an `expense-tracker` command
 ```
 
-Optionally, `pip install -e .` adds an `expense-tracker` command (for example, `expense-tracker sync --dry-run`).
+The code is in `expense_tracker/`, one module per stage. The pipeline runs `sources` → `parsing` → `sync` → `db` → `report`/`server`, and `statements` imports bank statements. [CLAUDE.md](CLAUDE.md) explains the architecture and its invariants, such as row identity, the two origins and schema migrations. The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are thin shims kept for older commands.
+
+`make media` re-records the video and screenshots from made-up data (`docs/media/`). It needs Node.js and `ffmpeg`, and takes about two minutes.
+
+## License
+
+[MIT](LICENSE)

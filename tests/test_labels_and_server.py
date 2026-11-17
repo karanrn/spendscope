@@ -121,6 +121,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.post({"expense_id": 1, "label": "X", "action": "rename"})[0], 400)
         self.assertEqual(self.post(["not", "an", "object"])[0], 400)
 
+    def status(self, path, headers, data=None):
+        req = urllib.request.Request(f"{self.base}{path}", data=data, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as res:
+                return res.status
+        except urllib.error.HTTPError as err:
+            with err:
+                return err.code
+
+    def test_rejects_other_hosts_and_cross_site_writes(self):
+        port = self.server.server_address[1]
+        body = json.dumps({"expense_id": 1, "label": "X", "action": "add"}).encode()
+        self.assertEqual(self.status("/", {"Host": f"localhost:{port}"}), 200)
+        self.assertEqual(self.status("/", {"Host": f"evil.example:{port}"}), 403)  # DNS rebinding
+        for headers in ({"Content-Type": "text/plain"},  # a plain form post, no preflight
+                        {"Content-Type": "application/json", "Origin": "http://evil.example"},
+                        {"Content-Type": "application/json", "Host": f"evil.example:{port}"}):
+            self.assertEqual(self.status("/api/labels", headers, body), 403, headers)
+        same_origin = {"Content-Type": "application/json", "Origin": self.base}
+        self.assertEqual(self.status("/api/labels", same_origin, body), 200)
+
 
 if __name__ == "__main__":
     unittest.main()
