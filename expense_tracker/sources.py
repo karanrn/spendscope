@@ -127,9 +127,15 @@ def read_google_xlsx_fallback(
 # ----------------------------------------------------------------- Google Sheets API
 def read_google_api(src: dict) -> tuple[list[list], str]:
     """Read every yearly spreadsheet the authorized account can see."""
-    gc = None
     try:
         import gspread
+        from google.auth.exceptions import RefreshError
+    except ImportError:
+        raise ExpenseTrackerError(
+            "pip install -r requirements.txt   (gspread is needed for the Google Sheets API; "
+            "if you use a virtualenv, run with its Python)") from None
+    gc = None
+    try:
         Path(src["oauth_token_json"]).parent.mkdir(parents=True, exist_ok=True)
         gc = gspread.oauth(
             credentials_filename=src["oauth_client_json"],
@@ -137,6 +143,12 @@ def read_google_api(src: dict) -> tuple[list[list], str]:
             scopes=gspread.auth.READONLY_SCOPES,
         )
         spreadsheets = yearly_spreadsheets(gc, src)
+    except RefreshError as exc:
+        raise ExpenseTrackerError(
+            f"The cached Google token in {src['oauth_token_json']} has expired or been revoked ({exc}). "
+            "Delete that file and sync again to sign in. If this recurs weekly, your OAuth consent "
+            "screen is in Testing mode, whose tokens last 7 days; publish the app to stop that."
+        ) from exc
     except Exception as api_error:
         sid = spreadsheet_id(src)
         if not sid:
