@@ -1,0 +1,49 @@
+name: Bank statement not recognised
+description: A statement from your bank is rejected or imported wrongly
+labels: ["bank-statement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping add support for another bank. **Never attach or paste a real statement.**
+        Statements hold your account number, balances and who you pay, and issues are public.
+
+        Instead, run this and paste its output, which masks every letter and digit of the transaction data:
+
+        ```
+        python -m expense_tracker sync --statement YOUR_FILE --show-headers
+        ```
+  - type: input
+    id: bank
+    attributes:
+      label: Bank and export option
+      description: For example "HDFC, NetBanking > Download > Excel (.xls)"
+    validations:
+      required: true
+  - type: dropdown
+    id: format
+    attributes:
+      label: File format
+      options: [".xls", ".xlsx", ".csv", ".txt", "other"]
+    validations:
+      required: true
+  - type: textarea
+    id: headers
+    attributes:
+      label: Output of --show-headers
+      description: Check it once more for anything personal before you submit.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What went wrong?
+      description: The error message, or which rows came out wrong (describe them, don't paste them).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `python -m expense_tracker --version`

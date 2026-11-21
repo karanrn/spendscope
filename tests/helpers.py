@@ -111,3 +111,9 @@ def write_statements(root: Path) -> tuple[Path, Path]:
     xlsx = root / "statement.xlsx"
     wb.save(xlsx)
     return txt, xlsx
+
+
+def add_config(project: Project, text: str) -> None:
+    """Append TOML sections to the project's config."""
+    with open(project.config_path, "a", encoding="utf-8") as f:
+        f.write("\n" + text + "\n")

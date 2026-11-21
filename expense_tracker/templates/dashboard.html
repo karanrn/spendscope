@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Expense Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>/*__CHARTJS__*/</script>
 <style>
 :root {
   color-scheme: light;
@@ -82,6 +82,7 @@ select, input[type="search"] {
 .chart.tall { height: 340px; }
 .table-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .table-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.table-tools button { font: inherit; color: var(--text-secondary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
 .trend-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 .trend-table { margin-top: 12px; font-size: 13px; }
 .trend-table td:first-child i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -187,6 +188,12 @@ button.tag-pill { cursor: pointer; }
     <div class="label-status" id="budget-status" aria-live="polite"></div>
   </div>
 
+  <div class="card" id="income-card" style="margin-bottom:12px" hidden>
+    <h2>Income vs spending</h2>
+    <div class="hint" id="income-hint"></div>
+    <div class="chart"><canvas id="c-income"></canvas></div>
+  </div>
+
   <div class="grid">
     <div class="card">
       <h2>Monthly spend by category</h2>
@@ -236,6 +243,7 @@ button.tag-pill { cursor: pointer; }
       <div class="table-tools">
         <select id="tmonth" aria-label="Transaction month"></select>
         <input type="search" id="q" placeholder="Search Item, labels…" aria-label="Search transactions">
+        <button type="button" id="csv" title="Download the transactions that match the filters, search and month above">Download CSV</button>
       </div>
     </div>
     <div class="label-status" id="label-status" aria-live="polite"></div>
@@ -254,18 +262,23 @@ button.tag-pill { cursor: pointer; }
 <script>
 const DATA = /*__DATA__*/null;
 const CUR = DATA.currency || "₹";
+const LOCALE = DATA.locale || "en-IN";
 // expenses without a Label (bank-statement imports, blank sheet Labels) show as "Unlabeled"
 const MISSING = DATA.missingLabels || [], UNLABELED = "Unlabeled";
 const ROWS = DATA.rows.map(r => ({ d: r[0], m: r[0].slice(0, 7), a: r[1], c: r[2] || UNLABELED, miss: MISSING.includes(r[2]), p: r[3] || "—", desc: r[4], sub: r[5], tags: r[6] || [], id: r[7] }));
-const fmt = v => CUR + Math.round(v).toLocaleString("en-IN");
+const num = v => Math.round(v).toLocaleString(LOCALE);
+const fmt = v => CUR + num(v);
+// axis labels: lakh/crore for Indian locales, the locale's own compact form elsewhere (12K, 1.2M)
+const compact = new Intl.NumberFormat(LOCALE, { notation: "compact", maximumFractionDigits: 1 });
 const fmtShort = v => {
   const a = Math.abs(v);
+  if (!/-IN$/i.test(LOCALE)) return CUR + compact.format(v);
   if (a >= 1e7) return CUR + (v / 1e7).toFixed(1).replace(/\.0$/, "") + "Cr";
   if (a >= 1e5) return CUR + (v / 1e5).toFixed(1).replace(/\.0$/, "") + "L";
   if (a >= 1e3) return CUR + (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
   return CUR + Math.round(v);
 };
-const monthName = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleString("en-IN", { month: "short", year: "2-digit" }); };
+const monthName = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleString(LOCALE, { month: "short", year: "2-digit" }); };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const sum = arr => arr.reduce((s, r) => s + r.a, 0);
 const group = (arr, key) => { const g = new Map(); for (const r of arr) g.set(key(r), (g.get(key(r)) || 0) + r.a); return g; };
@@ -524,12 +537,45 @@ function renderPayments(rows) {
   });
 }
 
+// ---- income (bank-statement deposits) against all spending, month by month
+const INCOME = (DATA.income || []).map(r => ({ d: r[0], m: r[0].slice(0, 7), a: r[1], desc: r[2] }));
+function renderIncome() {
+  const card = document.getElementById("income-card");
+  card.hidden = !INCOME.length;
+  if (!INCOME.length) return;
+  const months = monthsIn(), inRange = r => r.m >= state.from && r.m <= state.to;
+  const inc = group(INCOME.filter(inRange), r => r.m), out = group(ROWS.filter(inRange), r => r.m);
+  // the totals only count months that have income, so months without a statement don't read as overspending
+  const withIncome = months.filter(m => inc.get(m));
+  const tIn = withIncome.reduce((s, m) => s + inc.get(m), 0), tOut = withIncome.reduce((s, m) => s + (out.get(m) || 0), 0), net = tIn - tOut;
+  const span = withIncome.length === 1 ? monthName(withIncome[0]) : `the ${withIncome.length} months with income`;
+  document.getElementById("income-hint").textContent =
+    `Deposits from imported bank statements against every expense, whatever the filters above; months without a statement show no income. ` +
+    (withIncome.length ? `In ${span}: ${fmt(tIn)} in, ${fmt(tOut)} out, ` +
+      (net >= 0 ? `${fmt(net)} saved (${(net / tIn * 100).toFixed(0)}% of income).` : `${fmt(-net)} more spent than earned.`)
+      : "No income in the selected months.");
+  const o = baseOpts();
+  o.interaction = { mode: "index", intersect: false };
+  o.plugins.legend = { display: true, position: "top", align: "start", labels: { usePointStyle: true, pointStyle: "rectRounded", boxWidth: 8, boxHeight: 8, padding: 14 } };
+  o.plugins.tooltip.callbacks.footer = items => { const [i, s] = [items.find(x => x.datasetIndex === 0), items.find(x => x.datasetIndex === 1)]; return i && s ? "Net: " + fmt(i.parsed.y - s.parsed.y) : ""; };
+  draw("c-income", {
+    type: "bar",
+    data: {
+      labels: months.map(monthName),
+      datasets: [
+        { label: "Income", data: months.map(m => inc.get(m) || 0), backgroundColor: css("--s3"), borderRadius: 3, maxBarThickness: 28 },
+        { label: "Spent", data: months.map(m => out.get(m) || 0), backgroundColor: css("--s2"), borderRadius: 3, maxBarThickness: 28 }
+      ]
+    }, options: o
+  });
+}
+
 // ---- KPIs
 function pct(a, b) { if (!b) return ""; const d = (a - b) / b * 100; return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(0)}%</span>`; }
 function renderKpis(rows) {
   const months = monthsIn(), total = sum(rows);
   document.getElementById("k-total").textContent = fmt(total);
-  document.getElementById("k-total-sub").textContent = `${rows.length.toLocaleString("en-IN")} transactions · ${monthName(state.from)} – ${monthName(state.to)}`;
+  document.getElementById("k-total-sub").textContent = `${num(rows.length)} transactions · ${monthName(state.from)} – ${monthName(state.to)}`;
   // average over completed months (exclude the latest month if it's still in progress)
   const today = new Date().toISOString().slice(0, 7);
   const complete = months.filter(m => m < today);
@@ -612,7 +658,7 @@ function renderBudgets() {
     return `<tr class="${b.diff > 0 ? "over" : ""}"><td><i style="background:var(${slotVar(ROWS.find(r => r.c.toLowerCase() === b.label.toLowerCase())?.c ?? b.label)})"></i>${esc(b.label)}${b.only ? ` <span class="meta">· ${monthName(m)} only</span>` : ""}</td>` +
       `<td class="num">${edit(b)}${fmt(b.amount)}${remove(b)}</td><td class="num">${fmt(b.spent)}</td><td class="num">${overUnder(b)}</td><td class="num">${vsBudget(b)}</td>` +
       `<td><div class="bar" title="${(b.ratio * 100).toFixed(0)}% of budget used"><span class="${cls}" style="width:${Math.min(b.ratio, 1) * 100}%"></span>${pace !== null ? `<b style="left:${pace * 100}%"></b>` : ""}</div></td></tr>`;
-  }).join("") : `<tr><td colspan="6" class="empty">No budgets for ${monthName(m)}. ${DATA.editable ? "Add one below." : "Set them in the dashboard from <code>make serve</code>, or with <code>python -m expense_tracker budgets set Food 8000</code>."}</td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="empty">No budgets for ${monthName(m)}. ${DATA.editable ? "Add one below." : "Set them in the dashboard from <code>python -m expense_tracker serve</code>, or with <code>python -m expense_tracker budgets set Food 8000</code>."}</td></tr>`;
   const total = { amount: rows.reduce((s, b) => s + b.amount, 0), spent: rows.reduce((s, b) => s + b.spent, 0) };
   total.diff = total.spent - total.amount; total.ratio = total.spent / (total.amount || 1);
   document.getElementById("budget-foot").innerHTML = rows.length > 1
@@ -643,7 +689,7 @@ async function saveBudget(label, amount, month, control) {
     renderBudgets();
     return true;
   } catch (error) {
-    status.textContent = `Could not save budget: ${error.message}. Open the dashboard with make serve.`;
+    status.textContent = `Could not save budget: ${error.message}. Open the dashboard with: python -m expense_tracker serve`;
     return false;
   } finally {
     if (control) control.disabled = false;
@@ -671,19 +717,34 @@ document.getElementById("thead").addEventListener("click", e => {
   const th = e.target.closest("th"); if (!th) return;
   const k = +th.dataset.k; state.sortDir = state.sortK === k ? -state.sortDir : (k === 1 || k === 0 ? -1 : 1); state.sortK = k; renderTable();
 });
-function renderTable() {
+// the table's rows: the filters above, then its own month picker and search, in its sort order
+function tableRows() {
   const key = ["d", "a", "c", "p", "desc", "tags"][state.sortK];
   let rows = filtered();
   if (state.month) rows = rows.filter(r => r.m === state.month);
   if (state.q) rows = rows.filter(r => (r.desc + " " + r.c + " " + r.p + " " + r.sub + " " + r.tags.join(" ")).toLowerCase().includes(state.q));
-  rows.sort((x, y) => (x[key] > y[key] ? 1 : x[key] < y[key] ? -1 : 0) * state.sortDir);
+  return rows.sort((x, y) => (x[key] > y[key] ? 1 : x[key] < y[key] ? -1 : 0) * state.sortDir);
+}
+function downloadCsv() {
+  // a leading = + - @ would make spreadsheet apps run the text as a formula
+  const cell = v => { let s = String(v ?? ""); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const lines = [["Date", "Label", "Subcategory", "Item", "Additional labels", "Payment", "Amount"].join(",")];
+  for (const r of tableRows()) lines.push([r.d, r.miss ? "" : r.c, r.sub, r.desc, r.tags.join("; "), r.p === "—" ? "" : r.p].map(cell).concat(r.a.toFixed(2)).join(","));
+  const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `expenses-${state.month || state.from + "-to-" + state.to}.csv` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+document.getElementById("csv").onclick = downloadCsv;
+function renderTable() {
+  const rows = tableRows();
   document.querySelectorAll("#thead th").forEach(th => { th.textContent = th.textContent.replace(/ [▲▼]$/, ""); if (+th.dataset.k === state.sortK) th.textContent += state.sortDir > 0 ? " ▲" : " ▼"; });
   const shown = rows.slice(0, state.limit);
   document.getElementById("tbody").innerHTML = shown.length ? shown.map(r =>
     `<tr><td>${r.d}</td><td><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(${slotVar(r.c)});margin-right:6px"></i>${r.miss ? `<span class="missing">${esc(r.c)}</span>` : esc(r.c)}${r.sub ? ` <span class="meta">· ${esc(r.sub)}</span>` : ""}${r.miss && DATA.editable ? `<form class="primary-form" data-id="${r.id}"><input name="label" maxlength="80" list="primary-labels" placeholder="Set Label" aria-label="Set the Label of ${esc(r.desc || "this expense")}"><button type="submit">Set</button></form>` : ""}</td><td class="desc">${esc(r.desc)}</td><td><div class="tag-list">${r.tags.map(t => DATA.editable ? `<button class="tag-pill" type="button" data-remove-label="${esc(t)}" data-id="${r.id}" aria-label="Remove label ${esc(t)}">${esc(t)} ×</button>` : `<span class="tag-pill">${esc(t)}</span>`).join("")}${DATA.editable ? `<form class="tag-form" data-id="${r.id}"><input name="label" maxlength="80" placeholder="Add label" aria-label="Add a label to ${esc(r.desc || r.c)}"><button type="submit">Add</button></form>` : ""}</div></td><td>${esc(r.p)}</td><td class="num">${fmt(r.a)}</td></tr>`
   ).join("") : `<tr><td colspan="6" class="empty">No transactions match</td></tr>`;
   document.getElementById("more").innerHTML = rows.length > state.limit
-    ? `<button id="morebtn">Show more (${(rows.length - state.limit).toLocaleString("en-IN")} left)</button>` : "";
+    ? `<button id="morebtn">Show more (${num(rows.length - state.limit)} left)</button>` : "";
   const mb = document.getElementById("morebtn"); if (mb) mb.onclick = () => { state.limit += 200; renderTable(); };
 }
 
@@ -692,7 +753,7 @@ function render() {
   document.querySelectorAll("#range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === state.range));
   renderChips(); renderMonthOptions();
   const rows = filtered();
-  renderKpis(rows); renderBudgets(); renderMonthly(rows); renderTrend(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
+  renderKpis(rows); renderBudgets(); renderIncome(); renderMonthly(rows); renderTrend(rows); renderCategories(rows); renderCumulative(); renderPayments(rows); renderTable();
 }
 
 const VERBS = { add: ["Adding", "Added"], remove: ["Removing", "Removed"], set_primary: ["Setting", "Set Label"] };
@@ -727,7 +788,7 @@ async function changeLabel(expenseId, label, action, control) {
     status.textContent = `${VERBS[action][1]} “${action === "set_primary" ? result.category : label}” in the database.`;
     render();
   } catch (error) {
-    status.textContent = `Could not save label: ${error.message}. Open the dashboard with python serve.py.`;
+    status.textContent = `Could not save label: ${error.message}. Open the dashboard with: python -m expense_tracker serve`;
   } finally {
     if (control) control.disabled = false;
   }
@@ -746,9 +807,9 @@ document.getElementById("tbody").addEventListener("click", e => {
 });
 
 document.getElementById("meta").textContent =
-  (DATA.lastSync ? `Last synced ${DATA.lastSync.replace("T", " ")}` : "") + ` · ${ROWS.length.toLocaleString("en-IN")} expenses stored`;
+  (DATA.lastSync ? `Last synced ${DATA.lastSync.replace("T", " ")}` : "") + ` · ${num(ROWS.length)} expenses stored`;
 if (!ROWS.length) {
-  document.querySelector(".wrap").innerHTML += `<div class="card empty">No expenses yet — run <code>python sync.py</code> first.</div>`;
+  document.querySelector(".wrap").innerHTML += `<div class="card empty">No expenses yet. Import some with <code>python -m expense_tracker sync</code>, or try <code>python -m expense_tracker demo</code>.</div>`;
 } else {
   render();
   // re-color charts if the OS theme flips

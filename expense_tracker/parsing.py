@@ -22,15 +22,28 @@ def header_key(value: str) -> str:
     return re.sub(r"\s*\([^)]*\)", "", norm(value)).strip().lower()
 
 
-def parse_amount(v, symbol: str) -> float | None:
+CURRENCY_CODES = r"rs\.?|inr|usd|eur|gbp|aud|cad|sgd|aed|nzd|chf|jpy"
+CURRENCY_SIGNS = "₹$€£¥"
+
+
+def parse_amount(v, symbol: str, decimal: str = ".", code: str = "") -> float | None:
+    """A spreadsheet amount as a number. Currency signs and codes are ignored, "(200)" is
+    negative, and decimal="," reads European amounts such as "1.234,56"."""
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return float(v)
     s = norm(v)
     if not s:
         return None
     neg = s.startswith("(") and s.endswith(")")
-    s = re.sub(r"(?i)\b(rs\.?|inr)(?![a-z])", "", s)
-    s = s.replace(symbol, "").replace(",", "").replace("(", "").replace(")", "").strip()
+    codes = CURRENCY_CODES + (f"|{re.escape(code)}" if code else "")
+    s = re.sub(rf"(?i)\b({codes})(?![a-z])", "", s)
+    for sign in {symbol, *CURRENCY_SIGNS}:
+        s = s.replace(sign, "") if sign else s
+    s = s.replace("(", "").replace(")", "")
+    if decimal == ",":
+        s = re.sub(r"[.\s\u00a0\u202f']", "", s).replace(",", ".")
+    else:
+        s = re.sub(r"[,\s\u00a0\u202f']", "", s)
     try:
         x = float(s)
     except ValueError:
@@ -74,6 +87,7 @@ def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int, list[dict]
     cols, parsing = cfg["columns"], cfg.get("parsing", {})
     formats = parsing.get("date_formats", ["%d/%m/%Y", "%Y-%m-%d"])
     symbol = parsing.get("currency_symbol", "₹")
+    decimal, code = parsing.get("decimal_separator", "."), parsing.get("currency_code", "")
 
     headers = find_headers(rows, cols["date"], cols["amount"])
     out, skipped, failures = [], 0, []
@@ -105,7 +119,7 @@ def to_records(rows: list[list], cfg: dict) -> tuple[list[dict], int, list[dict]
             if not any(mapped) or any(TOTAL_RE.match(c) for c in mapped):
                 skipped += 1
                 continue
-            amt = parse_amount(r[idx["amount"]], symbol)
+            amt = parse_amount(r[idx["amount"]], symbol, decimal, code)
             if amt == 0 or (amt is None and not get("amount")
                             and not (get("description") or get("category"))):
                 skipped += 1

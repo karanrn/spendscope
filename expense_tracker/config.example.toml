@@ -1,0 +1,96 @@
+# ---------------------------------------------------------------
+# Expense tracker config. `python -m expense_tracker init` writes a copy of this file;
+# edit it once, then run `python -m expense_tracker doctor` to check it.
+# Relative paths below are relative to this file's folder.
+# ---------------------------------------------------------------
+
+[source]
+# Where your expenses come from:
+#   "file"        a local .xlsx or .csv (no Google account needed); start here
+#   "gsheet_csv"  a Google Sheet shared as "Anyone with the link can view" (sheet_url below)
+#   "gsheet_api"  your private yearly Google Sheets, found by title (needs a Google Cloud
+#                 OAuth client; see "Connecting Google Sheets" in the README)
+type = "file"
+
+# --- type = "file" ---
+# One file, or a pattern for several, such as one workbook per year.
+# Create one from the template with: python -m expense_tracker template
+file_path = "Expenses *.xlsx"
+file_sheet = ""               # .xlsx: one worksheet only; empty = every worksheet
+
+# --- type = "gsheet_csv" ---
+sheet_url = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+
+# --- type = "gsheet_api" ---
+# The OAuth client ID JSON (type "Desktop app") downloaded from Google Cloud. The first sync
+# opens a browser to sign in (read-only), and the token is cached in oauth_token_json.
+oauth_client_json = "oauth_client.json"
+oauth_token_json = "authorized_user.json"
+spreadsheet_title_pattern = '^Expenses [0-9]{4}$' # yearly workbooks to import (needs the Drive API)
+folder_id = ""                # optional: only look in this Drive folder
+sheet_id = ""                 # optional: read this one workbook instead of searching by title
+spreadsheet_title = ""        # optional: open this title when nothing matches the pattern
+
+# --- every source ---
+worksheet = ""                # Google Sheets: one tab only; empty = every monthly tab
+skip_worksheets = ["Summary"] # tabs of derived totals, never imported
+
+[database]
+path = "expenses.db"
+
+# Map YOUR column headers (right side) to the fields the tool uses (left side, fixed).
+# Header matching ignores case, surrounding spaces and a unit suffix like "Expense(INR)".
+# Only date and amount are required; set any other to "" if you don't have it.
+# Columns you don't map are still kept, in an "extra" JSON field.
+[columns]
+date        = "Date"
+amount      = "Expense"
+category    = "Label"
+description = "Item"
+payment     = ""
+subcategory = ""
+
+[parsing]
+# Date formats to try, in order (Python strptime codes). Put your own convention first:
+#   day first (India, UK, most of Europe): "%d/%m/%Y"   month first (US): "%m/%d/%Y"
+date_formats = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%b-%Y", "%d %b %Y", "%m/%d/%Y"]
+currency_symbol = "₹"         # shown in the dashboard, and ignored when reading amounts
+currency_code = "INR"         # also ignored when reading amounts ("INR 1,200")
+decimal_separator = "."       # "," reads European amounts such as 1.234,56
+# Rows with expense content that still fail to parse (bad date/amount) are written here
+# on every sync, overwriting the previous run's log.
+failures_log = "parse_failures.csv"
+
+[display]
+# How the dashboard formats numbers and month names: en-IN shows ₹1,00,000 and lakh/crore
+# axis labels, en-US shows $100,000, de-DE shows 100.000 and so on.
+locale = "en-IN"
+
+# Bank statements (sync --statement FILE). Headers are recognised automatically
+# (Date/Txn Date, Narration/Description/Particulars, Withdrawal/Debit/DR, Deposit/Credit/CR,
+# or one Amount column with an optional Dr/Cr column).
+[statements]
+date_formats = []             # tried before the built-in day-first formats
+import_deposits = false       # true: also keep deposits (salary, refunds) as income
+# decimal_separator = ","     # if your bank's differs from [parsing]'s
+# Only if a statement is rejected, name its headers here (one header or a list of them).
+# `sync --statement FILE --show-headers` shows what was recognised.
+[statements.columns]
+# date       = "Posted On"
+# narration  = ["Details", "Memo"]
+# debit      = "Money Out"
+# credit     = "Money In"
+# amount     = ""             # single signed amount column, instead of debit + credit
+# type       = ""             # column holding Dr/Cr for a single amount column
+# ref        = ""
+# balance    = ""
+# value_date = ""
+
+# Give expenses without a Label (bank-statement rows, blank Labels in the sheet) a Label by
+# keyword: Label = ["text in Item", ...], matched case-insensitively, first rule wins. They
+# run after every sync and statement import, and with `labels apply-rules`. Labels that
+# already exist are never changed.
+[rules]
+# Food = ["swiggy", "zomato"]
+# Petrol = ["fuel", "hpcl", "indian oil"]
+# "Rent and bills" = ["bescom", "act fibernet"]

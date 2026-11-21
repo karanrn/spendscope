@@ -1,0 +1,32 @@
+name: Bug report
+description: Something doesn't work as the README says
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please run `python -m expense_tracker doctor` first; it often says what to fix.
+        Remove amounts, item names, sheet IDs and anything personal from what you paste: issues are public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Command you ran and its output
+      render: text
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `python -m expense_tracker doctor`
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Version, OS and Python
+      description: For example "0.2.0, Windows 11, Python 3.12" (`python -m expense_tracker --version`)
+    validations:
+      required: true

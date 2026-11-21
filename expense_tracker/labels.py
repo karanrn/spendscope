@@ -117,3 +117,28 @@ def label_counts(con: sqlite3.Connection) -> list[tuple[str, int]]:
     return con.execute(
         "SELECT label, COUNT(*) FROM expense_labels GROUP BY label ORDER BY label COLLATE NOCASE"
     ).fetchall()
+
+
+def rule_label(description: str | None, rules: dict[str, list[str]]) -> str | None:
+    """The Label of the first rule with a keyword in this Item (case-insensitive), if any."""
+    text = (description or "").lower()
+    return next((label for label, words in rules.items()
+                 if any(w.lower() in text for w in words)), None)
+
+
+def apply_rules(con: sqlite3.Connection, rules: dict[str, list[str]],
+                dry_run: bool = False) -> dict[str, int]:
+    """Give expenses without a Label the Label of the first rule that matches their Item.
+
+    Rules come from config.toml's [rules] (Label → keywords) and are tried in order. Expenses
+    that already have a Label are never changed. Returns how many expenses each Label got.
+    """
+    pending: dict[str, list[int]] = {}
+    for expense_id, description in con.execute(
+            f"SELECT id, description FROM expenses WHERE {MISSING_SQL} ORDER BY id"):
+        label = rule_label(description, rules)
+        if label:
+            pending.setdefault(label, []).append(expense_id)
+    if dry_run:
+        return {label: len(ids) for label, ids in pending.items()}
+    return {label: set_primary_label(con, ids, clean_label(label)) for label, ids in pending.items()}

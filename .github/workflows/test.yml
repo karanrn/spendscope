@@ -7,14 +7,41 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.13"
+          - os: windows-latest
+            python-version: "3.13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -r requirements.txt
-      - run: make test
+      - run: python -m unittest discover -s tests -t .
+
+  package:
+    # the built wheel must carry the template, Chart.js and the example config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Install the wheel and run it from an empty folder
+        run: |
+          python -m pip install dist/*.whl
+          mkdir /tmp/smoke && cd /tmp/smoke
+          expense-tracker --version
+          expense-tracker demo --dir demo --no-serve
+          expense-tracker init --source file --region us
+          expense-tracker doctor
+          expense-tracker report --config demo/config.toml

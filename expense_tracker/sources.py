@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import glob
 import io
 import re
 import urllib.request
@@ -41,12 +42,37 @@ def skipped_sheet(title: str, src: dict) -> bool:
 
 
 # ----------------------------------------------------------------- local files
+def source_files(src: dict) -> list[Path]:
+    """The files a `file` source reads: file_path, which may be a glob such as "Expenses *.xlsx"."""
+    pattern = src.get("file_path") or ""
+    if not pattern:
+        raise ExpenseTrackerError('Set source.file_path in config.toml (for example "Expenses 2026.xlsx")')
+    if glob.has_magic(pattern):
+        files = sorted(Path(f) for f in glob.glob(pattern))
+        if not files:
+            raise ExpenseTrackerError(f"No files match source.file_path {pattern!r}")
+        return files
+    path = Path(pattern)
+    if not path.exists():
+        raise ExpenseTrackerError(
+            f"Source file not found: {path}\n"
+            "Create a workbook from the template with:  python -m expense_tracker template")
+    return [path]
+
+
 def read_file(src: dict) -> tuple[list[list], str]:
-    p = Path(src["file_path"])
-    if p.suffix.lower() in (".xlsx", ".xlsm"):
-        return workbook_rows(p.read_bytes(), f"file:{p.name}", src.get("file_sheet", ""), src)
-    with open(p, newline="", encoding="utf-8-sig") as f:
-        return [SheetRow(r, f"{p.name}:{i}") for i, r in enumerate(csv.reader(f), 1)], f"file:{p.name}"
+    rows, names = [], []
+    for p in source_files(src):
+        if p.suffix.lower() in (".xlsx", ".xlsm"):
+            part, name = workbook_rows(p.read_bytes(), f"file:{p.name}", src.get("file_sheet", ""), src)
+        else:
+            with open(p, newline="", encoding="utf-8-sig") as f:
+                part = [SheetRow(r, f"{p.name}:{i}") for i, r in enumerate(csv.reader(f), 1)]
+            name = f"file:{p.name}"
+        rows.extend(part)
+        rows.append([])  # do not carry a blank date into the next file
+        names.append(name)
+    return rows, "; ".join(names)
 
 
 def workbook_rows(content: bytes, name: str, file_sheet: str = "",

@@ -1,5 +1,7 @@
 """Expense tracker: Google Sheets → SQLite → dashboard."""
 
+__version__ = "0.2.0"
+
 
 class ExpenseTrackerError(Exception):
     """A problem the user can fix (bad config, missing database, unreadable source).

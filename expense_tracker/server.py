@@ -25,7 +25,7 @@ def allowed_hosts(host: str, port: int) -> set[str]:
     return {f"{name}:{port}" for name in names}
 
 
-def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
+def make_handler(db_path: Path, currency: str, locale: str = "en-IN") -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def _host_allowed(self) -> bool:
             """Reject other Host names, so a DNS-rebinding page can't read or change the data."""
@@ -60,7 +60,7 @@ def make_handler(db_path: Path, currency: str) -> type[BaseHTTPRequestHandler]:
                 self._json(404, {"error": "Not found"})
                 return
             try:
-                html = render_dashboard(load(db_path), currency, editable=True).encode("utf-8")
+                html = render_dashboard(load(db_path), currency, editable=True, locale=locale).encode("utf-8")
             except ExpenseTrackerError as exc:
                 self._json(500, {"error": str(exc)})
                 return
@@ -150,12 +150,14 @@ def dashboard_running(url: str) -> bool:
         return False
 
 
-def serve(db_path: Path, currency: str, host: str, port: int, open_browser: bool = True) -> None:
+def serve(db_path: Path, currency: str, host: str, port: int, open_browser: bool = True,
+          locale: str = "en-IN") -> None:
     if not db_path.exists():
-        raise ExpenseTrackerError(f"No database at {db_path}. Run sync.py first.")
+        raise ExpenseTrackerError(
+            f"No database at {db_path}. Import your expenses first: python -m expense_tracker sync")
     url = f"http://{host}:{port}/"
     try:
-        server = ThreadingHTTPServer((host, port), make_handler(db_path, currency))
+        server = ThreadingHTTPServer((host, port), make_handler(db_path, currency, locale))
     except OSError as exc:
         if exc.errno != errno.EADDRINUSE or not dashboard_running(url):
             raise

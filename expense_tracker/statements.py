@@ -3,8 +3,9 @@
 The transaction header row is found automatically: each header cell is matched against
 common bank spellings ("Txn Date", "Narration", "Withdrawal Amt.", "DR", "Amount" with a
 "Dr/Cr" column, ...). [statements.columns] in config.toml can name headers that aren't
-recognised. Only withdrawals become expenses; deposits are counted and skipped. Imported
-rows get no Label (category ""), so the user can set one later.
+recognised. Withdrawals become expenses; deposits are returned separately, and stored as
+income only when [statements] import_deposits is on. Imported expenses get no Label
+(category ""), so the user can set one later or let [rules] set it.
 """
 from __future__ import annotations
 
@@ -178,8 +179,9 @@ def parse_date(value, formats: tuple[str, ...]) -> date | None:
     return None
 
 
-def parse_amount(value) -> tuple[float, str]:
-    """(amount, "dr"/"cr" marker if the cell carries one). "(1,200.00)" and "-1200" are negative."""
+def parse_amount(value, decimal: str = ".") -> tuple[float, str]:
+    """(amount, "dr"/"cr" marker if the cell carries one). "(1,200.00)" and "-1200" are negative;
+    decimal="," reads "1.200,00"."""
     if isinstance(value, (int, float)):
         return float(value), ""
     text = str(value or "").strip()
@@ -188,6 +190,8 @@ def parse_amount(value) -> tuple[float, str]:
         text = text[:marker.start()].strip()
     kind = marker.group(1).lower() if marker else ""
     negative = text.startswith("(") and text.endswith(")")
+    if decimal == ",":
+        text = text.replace(".", "").replace(",", ".")
     digits = re.sub(r"[^\d.\-]", "", text)
     if digits in ("", "-", ".", "-."):
         return 0.0, kind
@@ -195,11 +199,12 @@ def parse_amount(value) -> tuple[float, str]:
     return (-abs(amount) if negative else amount), kind
 
 
-def split_amount(r: list, cell, cols: dict[str, int]) -> tuple[float, float]:
+def split_amount(r: list, cell, cols: dict[str, int], decimal: str = ".") -> tuple[float, float]:
     """(withdrawal, deposit) of one row, from debit/credit columns or a single amount column."""
     if "debit" in cols and "credit" in cols:
-        return abs(parse_amount(cell(r, "debit"))[0]), abs(parse_amount(cell(r, "credit"))[0])
-    amount, marker = parse_amount(cell(r, "amount"))
+        return (abs(parse_amount(cell(r, "debit"), decimal)[0]),
+                abs(parse_amount(cell(r, "credit"), decimal)[0]))
+    amount, marker = parse_amount(cell(r, "amount"), decimal)
     kind = header_key(cell(r, "type")) or marker
     if kind.startswith(("d", "w")):
         return abs(amount), 0.0
@@ -212,28 +217,30 @@ def channel(narration: str) -> str:
     return next((name for rx, name in CHANNELS if rx.search(narration)), "Bank")
 
 
-def statement_options(cfg: dict | None) -> tuple[dict[str, list[str]], tuple[str, ...]]:
-    """Header-name overrides and date formats from config.toml's [statements] section."""
+def statement_options(cfg: dict | None) -> tuple[dict[str, list[str]], tuple[str, ...], str]:
+    """Header-name overrides, date formats and decimal separator from config.toml's [statements]
+    section (the decimal separator defaults to [parsing]'s)."""
     section = (cfg or {}).get("statements", {})
+    decimal = section.get("decimal_separator", (cfg or {}).get("parsing", {}).get("decimal_separator", "."))
     columns = {f: as_list(v) for f, v in section.get("columns", {}).items() if as_list(v)}
     unknown = set(columns) - set(FIELDS)
     if unknown:
         raise ExpenseTrackerError(f"Unknown [statements.columns] keys: {', '.join(sorted(unknown))}. "
                                   f"Use: {', '.join(FIELDS)}")
-    return columns, tuple(section.get("date_formats", ())) + DATE_FORMATS
+    return columns, tuple(section.get("date_formats", ())) + DATE_FORMATS, decimal
 
 
-def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], set[tuple]]:
-    """Return (withdrawal records, identities of the deposits skipped) from one statement file."""
+def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """Return (withdrawal records, deposit records) from one statement file."""
     if not path.exists():
         raise ExpenseTrackerError(f"Statement not found: {path}")
-    overrides, formats = statement_options(cfg)
+    overrides, formats, decimal = statement_options(cfg)
     rows, header, cols = find_columns(read_tables(path), overrides, path.name)
 
     def cell(r, f):
         return r[cols[f]] if f in cols and cols[f] < len(r) and r[cols[f]] is not None else ""
 
-    out, deposits = [], set()
+    out, deposits = [], []
     previous = None  # the last withdrawal, while following rows may continue its narration
     for r in rows[header + 1:]:
         d = parse_date(cell(r, "date"), formats)
@@ -249,14 +256,12 @@ def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], set
             continue
         previous = None
         try:
-            debit, credit = split_amount(r, cell, cols)
-            balance = parse_amount(cell(r, "balance"))[0]
+            debit, credit = split_amount(r, cell, cols, decimal)
+            balance = parse_amount(cell(r, "balance"), decimal)[0]
         except ValueError:
             raise ExpenseTrackerError(f"{path.name}: unreadable amount in row {r}")
         ref = str(cell(r, "ref")).strip()
-        if debit <= 0:
-            if credit > 0:
-                deposits.add((d, ref, round(credit, 2), round(balance, 2)))
+        if debit <= 0 and credit <= 0:
             continue
         narration = " ".join(str(cell(r, "narration")).split())
         value_date = parse_date(cell(r, "value_date"), formats)
@@ -264,7 +269,7 @@ def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], set
             "date": d.isoformat(),
             "month": d.strftime("%Y-%m"),
             "year": d.year,
-            "amount": round(debit, 2),
+            "amount": round(debit if debit > 0 else credit, 2),
             "category": "",
             "subcategory": None,
             "description": narration or None,
@@ -275,32 +280,76 @@ def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], set
             "_balance": round(balance, 2),
             "_ref": ref,
         }
-        out.append(previous)
-    for rec in out:
+        if debit > 0:
+            out.append(previous)
+        else:
+            del previous["category"], previous["subcategory"], previous["origin"]
+            deposits.append(previous)
+    for rec in out + deposits:
         rec["extra"] = json.dumps({k: v for k, v in rec["extra"].items() if v}, ensure_ascii=False)
     return out, deposits
 
 
-def assign_row_keys(records: list[dict]) -> None:
+def assign_row_keys(records: list[dict], prefix: str = "bank") -> None:
     """Identity = date, reference, amount and closing balance (+ occurrence), which are the
-    same in every export format and in overlapping statements, unlike narration padding."""
+    same in every export format and in overlapping statements, unlike narration padding.
+    Withdrawals use the prefix "bank" (never change it: stored rows would duplicate), deposits
+    "bank-in"."""
     seen = Counter()
     for rec in records:
-        base = f"bank|{rec['date']}|{rec['_ref']}|{rec['amount']:.2f}|{rec['_balance']:.2f}"
+        base = f"{prefix}|{rec['date']}|{rec['_ref']}|{rec['amount']:.2f}|{rec['_balance']:.2f}"
         seen[base] += 1
         rec["row_key"] = hashlib.sha1(f"{base}#{seen[base]}".encode()).hexdigest()
 
 
-def read_statements(paths: list[Path], cfg: dict | None = None) -> tuple[list[dict], int]:
-    """Records from several statements, with the same transaction in two files kept once."""
-    records, deposits = {}, set()
+def read_statements(paths: list[Path], cfg: dict | None = None) -> tuple[list[dict], list[dict]]:
+    """(withdrawals, deposits) from several statements, with the same transaction in two files
+    kept once."""
+    records, deposits = {}, {}
     for path in paths:
-        recs, dep = read_statement(path, cfg)
+        recs, deps = read_statement(path, cfg)
         assign_row_keys(recs)
+        assign_row_keys(deps, "bank-in")
         for rec in recs:
             records.setdefault(rec["row_key"], rec)
-        deposits |= dep
+        for dep in deps:
+            deposits.setdefault(dep["row_key"], dep)
     out = sorted(records.values(), key=lambda r: r["date"])
-    for rec in out:
+    income = sorted(deposits.values(), key=lambda r: r["date"])
+    for rec in out + income:
         del rec["_balance"], rec["_ref"]
-    return out, len(deposits)
+    return out, income
+
+
+def redact(value) -> str:
+    """A cell with its letters and digits masked, keeping the format: "UPI-ACME 1,200.50" →
+    "XXX-XXXX 9,999.99". Safe to paste into a bug report."""
+    text = value.isoformat() if isinstance(value, (date, datetime)) else str(value if value is not None else "")
+    return re.sub(r"\d", "9", re.sub(r"[^\W\d_]", "X", text))
+
+
+def describe_statement(path: Path, cfg: dict | None = None) -> str:
+    """What the parser makes of a statement, with transaction data redacted: the header row
+    and the column each field was read from, or the closest header row when none fits."""
+    if not path.exists():
+        raise ExpenseTrackerError(f"Statement not found: {path}")
+    overrides, formats, _ = statement_options(cfg)
+    try:
+        rows, header, cols = find_columns(read_tables(path), overrides, path.name)
+    except ExpenseTrackerError as exc:
+        return str(exc)
+    head = rows[header]
+    lines = [f"{path.name}: header found on row {header + 1}",
+             "  header: " + " | ".join(str(c).strip() for c in head if str(c or "").strip())]
+    for field in FIELDS:
+        if field in cols:
+            lines.append(f"  {field:<10} <- {str(head[cols[field]]).strip()!r} (column {cols[field] + 1})")
+    missing = [f for f in FIELDS if f not in cols]
+    if missing:
+        lines.append("  not found: " + ", ".join(missing))
+    date_col = cols["date"]
+    sample = next((r for r in rows[header + 1:]
+                   if date_col < len(r) and parse_date(r[date_col], formats)), None)
+    if sample:
+        lines.append("  first transaction (redacted): " + " | ".join(redact(c) for c in sample))
+    return "\n".join(lines)

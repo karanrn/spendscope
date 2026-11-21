@@ -1,15 +1,24 @@
+# Your config (start from `python -m expense_tracker init`; the example is expense_tracker/config.example.toml)
+config.toml
+
 # OAuth credentials and cached user tokens
-service_account.json
 oauth_client.json
+service_account.json
 authorized_user.json
 
-# Local data, generated dashboard, and Python environment
+# Local data, backups, generated dashboard
 expenses.db*
+backups/
 dashboard.html
 parse_failures.csv
+
+# Python environment and build output
 .venv/
 __pycache__/
 *.py[cod]
+build/
+dist/
+*.egg-info/
 
 # Bank statements (personal account data)
 Acct_Statement_*
@@ -19,4 +28,4 @@ statements/
 *.xls
 *.xlsx
 *.xlsm
-!Template - Expenses 2026.xlsx
+!expense_tracker/templates/expenses-template.xlsx

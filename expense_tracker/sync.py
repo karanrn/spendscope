@@ -4,6 +4,9 @@ Expenses come from the configured sheet source (origin 'sheet') or from bank sta
 (origin 'bank'). The same spend is often in both, so a bank withdrawal with the same date
 and amount (to the rupee; the sheet often rounds) as a sheet row counts as that row: the
 sheet's entry wins and the bank's is not stored (or is removed if it was imported first).
+
+After each import, [rules] in config.toml give a Label to expenses that have none.
+Statement deposits are stored in the income table when [statements] import_deposits is on.
 """
 from __future__ import annotations
 
@@ -13,8 +16,8 @@ import sqlite3
 from collections import Counter
 from pathlib import Path
 
-from expense_tracker import db
-from expense_tracker.config import database_path
+from expense_tracker import db, labels
+from expense_tracker.config import database_path, rules
 from expense_tracker.parsing import to_records
 from expense_tracker.sources import read_rows
 from expense_tracker.statements import read_statements
@@ -38,6 +41,24 @@ def insert_expenses(con: sqlite3.Connection, records: list[dict], now: str, sync
         "(:row_key, :date, :month, :year, :amount, :category, :subcategory, :description,"
         " :payment, :extra, :origin, :first_seen, :sync_id)",
         [{"origin": "sheet", **r, "first_seen": now, "sync_id": sync_id} for r in records])
+
+
+def apply_rules(con: sqlite3.Connection, cfg: dict, dry_run: bool = False,
+                pending: list[dict] | None = None) -> None:
+    """Run [rules] over expenses without a Label and report what they set. A dry run counts
+    the matches among the stored rows plus the not-yet-stored `pending` records."""
+    configured = rules(cfg)
+    if not configured:
+        return
+    counts = labels.apply_rules(con, configured, dry_run=True) if dry_run else labels.apply_rules(con, configured)
+    for r in pending or []:
+        label = labels.rule_label(r.get("description"), configured) if r.get("category") in labels.MISSING_LABELS else None
+        if label:
+            counts[label] = counts.get(label, 0) + 1
+    total = sum(counts.values())
+    if total:
+        detail = ", ".join(f"{label} {n}" for label, n in counts.items() if n)
+        print(f"{'Rules would set' if dry_run else 'Rules set'} a Label on {total} expenses ({detail})")
 
 
 def same_spend_key(day: str, amount: float) -> tuple[str, int]:
@@ -100,6 +121,7 @@ def sync(cfg: dict, mirror: bool = False, dry_run: bool = False, full_rescan: bo
                 print(f"  + {r['date']}  {r['amount']:>10,.2f}  {r['category']:<16} {r['description'] or ''}")
             if len(new) > 10:
                 print(f"  ... and {len(new) - 10} more")
+            apply_rules(con, cfg, dry_run=True, pending=new)
             print("Dry run: nothing written.")
             return
 
@@ -119,6 +141,7 @@ def sync(cfg: dict, mirror: bool = False, dry_run: bool = False, full_rescan: bo
                     " SELECT (SELECT id FROM expenses WHERE row_key = ?), label, created_at"
                     " FROM expense_labels WHERE expense_id = ?", (row_key, bank_id))
                 con.execute("DELETE FROM expenses WHERE id = ?", (bank_id,))
+        apply_rules(con, cfg)
 
         total, n = con.execute("SELECT COALESCE(SUM(amount),0), COUNT(*) FROM expenses").fetchone()
         print(f"Database {db_path}: {n} expenses, total {total:,.2f}")
@@ -129,6 +152,7 @@ def sync(cfg: dict, mirror: bool = False, dry_run: bool = False, full_rescan: bo
 def sync_statements(cfg: dict, paths: list[Path], dry_run: bool = False) -> None:
     """Import withdrawals from bank statements, skipping ones already stored or in the sheet."""
     records, deposits = read_statements(paths, cfg)
+    import_deposits = bool(cfg.get("statements", {}).get("import_deposits", False))
     source = "statements: " + ", ".join(p.name for p in paths)
     db_path = database_path(cfg)
 
@@ -151,16 +175,24 @@ def sync_statements(cfg: dict, paths: list[Path], dry_run: bool = False) -> None
         existing = {k for (k,) in con.execute("SELECT row_key FROM expenses")}
         new = [r for r in keep if r["row_key"] not in existing]
         redundant = [r["row_key"] for r in covered if r["row_key"] in existing]
+        stored_income = {k for (k,) in con.execute("SELECT row_key FROM income")}
+        new_income = [r for r in deposits if r["row_key"] not in stored_income] if import_deposits else []
 
-        print(f"Read {len(records)} withdrawals from {source} ({deposits} deposits skipped)")
+        if import_deposits:
+            print(f"Read {len(records)} withdrawals and {len(deposits)} deposits from {source}")
+        else:
+            print(f"Read {len(records)} withdrawals from {source} ({len(deposits)} deposits skipped;"
+                  " set import_deposits = true under [statements] to keep them as income)")
         print(f"  new: {len(new)}   already stored: {len(keep) - len(new)}"
               f"   already in sheet: {len(covered)}"
-              + (f"   removed (now in sheet): {len(redundant)}" if redundant else ""))
+              + (f"   removed (now in sheet): {len(redundant)}" if redundant else "")
+              + (f"   new income: {len(new_income)}" if import_deposits else ""))
         if dry_run:
             for r in new[:10]:
                 print(f"  + {r['date']}  {r['amount']:>10,.2f}  {r['payment']:<5} {r['description'] or ''}")
             if len(new) > 10:
                 print(f"  ... and {len(new) - 10} more")
+            apply_rules(con, cfg, dry_run=True, pending=new)
             print("Dry run: nothing written.")
             return
 
@@ -168,10 +200,17 @@ def sync_statements(cfg: dict, paths: list[Path], dry_run: bool = False) -> None
         with con:
             cur = con.execute(
                 "INSERT INTO sync_runs(run_at, source, rows_read, inserted, removed, skipped) "
-                "VALUES (?,?,?,?,?,?)", (now, source, len(records), len(new), len(redundant), deposits))
+                "VALUES (?,?,?,?,?,?)",
+                (now, source, len(records), len(new), len(redundant), 0 if import_deposits else len(deposits)))
             insert_expenses(con, new, now, cur.lastrowid)
             con.executemany("DELETE FROM expenses WHERE row_key = ? AND origin = 'bank'",
                             [(k,) for k in redundant])
+            con.executemany(
+                "INSERT OR IGNORE INTO income(row_key, date, month, year, amount, description, payment,"
+                " extra, first_seen, sync_id) VALUES (:row_key, :date, :month, :year, :amount,"
+                " :description, :payment, :extra, :first_seen, :sync_id)",
+                [{**r, "first_seen": now, "sync_id": cur.lastrowid} for r in new_income])
+        apply_rules(con, cfg)
 
         unlabeled = con.execute("SELECT COUNT(*) FROM expenses WHERE category = ''").fetchone()[0]
         total, n = con.execute("SELECT COALESCE(SUM(amount),0), COUNT(*) FROM expenses").fetchone()

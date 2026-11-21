@@ -32,7 +32,7 @@ class StatementParsingTests(unittest.TestCase):
         from_xlsx, _ = read_statements([self.xlsx])
         self.assertEqual([r["row_key"] for r in from_txt], [r["row_key"] for r in from_xlsx])
         both, deposits = read_statements([self.txt, self.xlsx])
-        self.assertEqual((len(both), deposits), (3, 1))
+        self.assertEqual((len(both), len(deposits)), (3, 1))
 
     def test_file_without_transaction_header_is_a_user_error(self):
         bad = self.project.root / "notes.txt"

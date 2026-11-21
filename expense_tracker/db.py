@@ -44,6 +44,22 @@ CREATE TABLE IF NOT EXISTS budgets (
     PRIMARY KEY (label, month)
 );
 
+-- bank-statement deposits, imported only with [statements] import_deposits = true
+CREATE TABLE IF NOT EXISTS income (
+    id          INTEGER PRIMARY KEY,
+    row_key     TEXT NOT NULL UNIQUE,   -- date, ref, amount and closing balance, like bank expenses
+    date        TEXT NOT NULL,
+    month       TEXT NOT NULL,
+    year        INTEGER NOT NULL,
+    amount      REAL NOT NULL,
+    description TEXT,
+    payment     TEXT,
+    extra       TEXT,
+    first_seen  TEXT NOT NULL,
+    sync_id     INTEGER REFERENCES sync_runs(id)
+);
+CREATE INDEX IF NOT EXISTS idx_income_month ON income(month);
+
 CREATE TABLE IF NOT EXISTS sync_runs (
     id          INTEGER PRIMARY KEY,
     run_at      TEXT NOT NULL,
@@ -80,7 +96,8 @@ def connect(db_path: Path, *, create: bool = False) -> sqlite3.Connection:
     if create:
         db_path.parent.mkdir(parents=True, exist_ok=True)
     elif not db_path.exists():
-        raise ExpenseTrackerError(f"No database at {db_path}. Run sync.py first.")
+        raise ExpenseTrackerError(
+            f"No database at {db_path}. Import your expenses first: python -m expense_tracker sync")
     con = sqlite3.connect(db_path, timeout=5)
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA busy_timeout = 5000")
@@ -88,6 +105,30 @@ def connect(db_path: Path, *, create: bool = False) -> sqlite3.Connection:
     con.execute("PRAGMA synchronous = FULL")
     initialize_database(con)
     return con
+
+
+def backup(db_path: Path, out: Path | None = None) -> Path:
+    """Copy the database safely, even while it is in use; returns the copy's path.
+
+    The default destination is backups/expenses-<timestamp>.db next to the database.
+    """
+    if not db_path.exists():
+        raise ExpenseTrackerError(f"No database at {db_path} to back up.")
+    if out is None:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out = db_path.parent / "backups" / f"{db_path.stem}-{stamp}{db_path.suffix or '.db'}"
+    if out.exists():
+        raise ExpenseTrackerError(f"{out} already exists; choose another --out.")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    src = sqlite3.connect(db_path)
+    dst = sqlite3.connect(out)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    return out
 
 
 def timestamp() -> str:
