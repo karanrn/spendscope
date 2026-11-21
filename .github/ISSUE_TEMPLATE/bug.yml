@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please run `python -m expense_tracker doctor` first; it often says what to fix.
+        Please run `python -m spendscope doctor` first; it often says what to fix.
         Remove amounts, item names, sheet IDs and anything personal from what you paste: issues are public.
   - type: textarea
     id: what
@@ -21,12 +21,12 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `python -m expense_tracker doctor`
+      label: Output of `python -m spendscope doctor`
       render: text
   - type: input
     id: env
     attributes:
       label: Version, OS and Python
-      description: For example "0.2.0, Windows 11, Python 3.12" (`python -m expense_tracker --version`)
+      description: For example "0.2.0, Windows 11, Python 3.12" (`python -m spendscope --version`)
     validations:
       required: true

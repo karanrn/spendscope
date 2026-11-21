@@ -7,14 +7,14 @@ from pathlib import Path
 demo, out = Path(sys.argv[1]), Path(sys.argv[2])
 for f in demo.glob("expenses.db*"):
     f.unlink()
-B = "python -m expense_tracker budgets"
+B = "python -m spendscope budgets"
 steps = [
     ("make dry-run", "Preview the import from “Expenses 2026”: nothing is written"),
     ("make sync", "Import every month tab into SQLite (expenses.db)"),
     ("make statement FILES='Acct_Statement_*.txt'", "Import bank-statement withdrawals; ones already in the sheet are skipped"),
-    ("python -m expense_tracker labels add Work --source-label Food --item-contains 'team lunch'", "Bulk-add your own extra labels on top of the sheet’s Label"),
-    ("python -m expense_tracker labels add Trip --source-label Misc --item-contains goa", "Bulk-add your own extra labels on top of the sheet’s Label"),
-    ("python -m expense_tracker labels set-primary Investment --item-contains groww", "Give bank rows without a Label one in bulk"),
+    ("python -m spendscope labels add Work --source-label Food --item-contains 'team lunch'", "Bulk-add your own extra labels on top of the sheet’s Label"),
+    ("python -m spendscope labels add Trip --source-label Misc --item-contains goa", "Bulk-add your own extra labels on top of the sheet’s Label"),
+    ("python -m spendscope labels set-primary Investment --item-contains groww", "Give bank rows without a Label one in bulk"),
     (f"{B} set 'Rent And Bills' 35000", "Set a monthly budget per Label"),
     (f"{B} set Food 12000", "Set a monthly budget per Label"),
     (f"{B} set Grocery 7000", "Set a monthly budget per Label"),
@@ -32,9 +32,9 @@ for cmd, caption in steps:
     p = subprocess.run(run, shell=True, cwd=demo, capture_output=True, text=True, env=env)
     if p.returncode:
         sys.exit(f"{cmd} failed:\n{p.stderr}")
-    text = (p.stdout + p.stderr).replace(str(demo), "~/expense-tracker")
+    text = (p.stdout + p.stderr).replace(str(demo), "~/spendscope")
     result.append({"cmd": cmd, "out": text.rstrip("\n").split("\n"), "caption": caption})
-result.append({"cmd": "make serve", "out": ["python3 -m expense_tracker serve",
+result.append({"cmd": "make serve", "out": ["python3 -m spendscope serve",
                "Editable expense dashboard: http://127.0.0.1:8765/ (Ctrl+C to stop)"],
                "caption": "Start the editable dashboard on localhost"})
 out.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")

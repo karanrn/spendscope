@@ -2,10 +2,10 @@ import sqlite3
 import unittest
 from contextlib import closing
 
-from expense_tracker import ExpenseTrackerError, db, labels
-from expense_tracker.cli import main
-from expense_tracker.statements import read_statement, read_statements
-from expense_tracker.sync import sync, sync_statements
+from spendscope import SpendScopeError, db, labels
+from spendscope.cli import main
+from spendscope.statements import read_statement, read_statements
+from spendscope.sync import sync, sync_statements
 from tests.helpers import CSV_ROWS, Project, quietly, write_statements
 
 
@@ -37,7 +37,7 @@ class StatementParsingTests(unittest.TestCase):
     def test_file_without_transaction_header_is_a_user_error(self):
         bad = self.project.root / "notes.txt"
         bad.write_text("just,some,text\n", encoding="utf-8")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             read_statement(bad)
 
 
@@ -124,7 +124,7 @@ class OtherBankLayoutTests(unittest.TestCase):
             "Posted On,What,Out,In",
             "11/04/2026,Bookshop,640,",
         ]))
-        with self.assertRaises(ExpenseTrackerError) as err:
+        with self.assertRaises(SpendScopeError) as err:
             read_statement(path)
         self.assertIn("Closest row", str(err.exception))
         cfg = {"statements": {"columns": {"date": "Posted On", "narration": ["What", "Memo"],
@@ -133,7 +133,7 @@ class OtherBankLayoutTests(unittest.TestCase):
 
     def test_unknown_config_column_is_a_user_error(self):
         path = self.write("x.csv", "Date,Narration,Debit,Credit\n")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             read_statement(path, {"statements": {"columns": {"payee": "Who"}}})
 
 

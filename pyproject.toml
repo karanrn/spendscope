@@ -1,6 +1,5 @@
 [project]
-# "expense-tracker" is taken on PyPI; the command is still `expense-tracker`
-name = "sheets-expense-tracker"
+name = "spendscope"
 dynamic = ["version"]
 description = "Import yearly Google Sheets expenses and bank statements into SQLite and explore them in a local dashboard"
 readme = "README.md"
@@ -27,22 +26,22 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/karanrn/expense-tracker"
-Issues = "https://github.com/karanrn/expense-tracker/issues"
-Changelog = "https://github.com/karanrn/expense-tracker/blob/main/CHANGELOG.md"
+Repository = "https://github.com/karanrn/spendscope"
+Issues = "https://github.com/karanrn/spendscope/issues"
+Changelog = "https://github.com/karanrn/spendscope/blob/main/CHANGELOG.md"
 
 [project.scripts]
-expense-tracker = "expense_tracker.cli:main"
+spendscope = "spendscope.cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["expense_tracker"]
+packages = ["spendscope"]
 
 [tool.setuptools.dynamic]
-version = { attr = "expense_tracker.__version__" }
+version = { attr = "spendscope.__version__" }
 
 [tool.setuptools.package-data]
-expense_tracker = ["templates/*.html", "templates/*.js", "templates/*.xlsx", "config.example.toml"]
+spendscope = ["templates/*.html", "templates/*.js", "templates/*.xlsx", "config.example.toml"]

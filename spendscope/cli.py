@@ -1,18 +1,17 @@
-"""Command line: python -m expense_tracker {init,demo,doctor,sync,serve,report,labels,budgets,
-template,backup} [options]. Installed with pip/pipx, the same commands run as `expense-tracker`."""
+"""Command line: python -m spendscope {init,demo,doctor,sync,serve,report,labels,budgets,
+template,backup} [options]. Installed with pip/pipx, the same commands run as `spendscope`."""
 from __future__ import annotations
 
 import argparse
 import sys
-import webbrowser
 from datetime import date
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError, __version__, budgets, db, labels
-from expense_tracker.config import (ENV_VAR, currency_symbol, database_path, display_locale, load_config,
+from spendscope import SpendScopeError, __version__, budgets, db, labels
+from spendscope.config import (ENV_VAR, currency_symbol, database_path, display_locale, load_config,
                                     rules)
 
-CMD = "python -m expense_tracker"
+CMD = "python -m spendscope"
 
 DESCRIPTION = f"""\
 Import yearly expense sheets and bank statements into SQLite, and explore them in a local dashboard.
@@ -145,7 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     nested.add_argument("--config", default=argparse.SUPPRESS, help="path to config.toml")
     raw = argparse.RawDescriptionHelpFormatter
 
-    parser = argparse.ArgumentParser(prog="expense_tracker", description=DESCRIPTION, formatter_class=raw)
+    parser = argparse.ArgumentParser(prog="spendscope", description=DESCRIPTION, formatter_class=raw)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
@@ -252,57 +251,58 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_init(args: argparse.Namespace) -> None:
-    from expense_tracker.scaffold import init_project
+    from spendscope.scaffold import init_project
     init_project(Path(args.config) if args.config else None, args.source, args.region,
                  args.global_config, args.force)
 
 
 def run_demo(args: argparse.Namespace) -> None:
-    from expense_tracker.demo import run_demo as demo
+    from spendscope.demo import run_demo as demo
     demo(Path(args.dir).expanduser().resolve() if args.dir else None, not args.no_serve,
          not args.no_open, args.port)
 
 
 def run_doctor(args: argparse.Namespace) -> None:
-    from expense_tracker.doctor import run_doctor as doctor
+    from spendscope.doctor import run_doctor as doctor
     if not doctor(args.config, args.offline):
         sys.exit(1)
 
 
 def run_sync(args: argparse.Namespace) -> None:
-    from expense_tracker.sync import sync, sync_statements
+    from spendscope.sync import sync, sync_statements
     cfg = load_config(args.config)
     if args.show_headers:
         if not args.statement:
-            raise ExpenseTrackerError("--show-headers needs --statement FILE…")
-        from expense_tracker.statements import describe_statement
+            raise SpendScopeError("--show-headers needs --statement FILE…")
+        from spendscope.statements import describe_statement
         for p in args.statement:
             print(describe_statement(Path(p).expanduser(), cfg))
         return
     if args.statement:
         if args.mirror or args.full_rescan:
-            raise ExpenseTrackerError("--mirror and --full-rescan apply to the sheet source, not --statement")
+            raise SpendScopeError("--mirror and --full-rescan apply to the sheet source, not --statement")
         sync_statements(cfg, [Path(p).expanduser() for p in args.statement], args.dry_run)
     else:
         sync(cfg, args.mirror, args.dry_run, args.full_rescan)
 
 
 def run_serve(args: argparse.Namespace) -> None:
-    from expense_tracker.server import serve
+    from spendscope.server import serve
     cfg = load_config(args.config)
     serve(database_path(cfg), currency_symbol(cfg), args.host, args.port, not args.no_open,
           display_locale(cfg))
 
 
 def run_report(args: argparse.Namespace) -> None:
-    from expense_tracker.report import write_report
+    from spendscope.report import write_report
     cfg = load_config(args.config)
     db_path = database_path(cfg)
     out = Path(args.out).expanduser() if args.out else db_path.parent / "dashboard.html"
     count = write_report(db_path, currency_symbol(cfg), out, display_locale(cfg))
     print(f"Dashboard written: {out}  ({count} expenses)")
     if args.open:
-        webbrowser.open_new_tab(out.resolve().as_uri())  # reuse the open browser window
+        from spendscope.server import open_in_browser
+        open_in_browser(out.resolve().as_uri())
 
 
 def run_labels(args: argparse.Namespace) -> None:
@@ -378,7 +378,7 @@ def run_budgets(args: argparse.Namespace) -> None:
 
 
 def run_template(args: argparse.Namespace) -> None:
-    from expense_tracker.template import workbook_name, write_template
+    from spendscope.template import workbook_name, write_template
     year = args.year or date.today().year
     out = Path(args.out).expanduser() if args.out else Path.cwd()
     if out.is_dir() or (args.out and args.out.endswith(("/", "\\"))):
@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     try:
         args.run(args)
-    except ExpenseTrackerError as exc:
+    except SpendScopeError as exc:
         sys.exit(str(exc))
     except KeyboardInterrupt:
         sys.exit(130)

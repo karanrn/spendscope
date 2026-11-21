@@ -11,10 +11,10 @@ import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
-from expense_tracker.template import workbook_name, write_template
+from spendscope import SpendScopeError
+from spendscope.template import workbook_name, write_template
 
-MARKER = ".expense-tracker-demo"  # marks a folder build_demo may replace
+MARKER = ".spendscope-demo"  # marks a folder build_demo may replace
 
 CONFIG = '''[source]
 type = "file"
@@ -188,10 +188,10 @@ def build_demo(out: Path, today: date | None = None, months: int | None = 12,
     end = today - timedelta(days=1)
     if out.exists() and any(out.iterdir()):
         if not (out / MARKER).exists():
-            raise ExpenseTrackerError(f"{out} is not empty and is not an earlier demo; choose another --dir.")
+            raise SpendScopeError(f"{out} is not empty and is not an earlier demo; choose another --dir.")
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / MARKER).write_text("Made-up data written by `python -m expense_tracker demo`; safe to delete.\n")
+    (out / MARKER).write_text("Made-up data written by `python -m spendscope demo`; safe to delete.\n")
     rows = sheet_rows(end, months_until(end, months), random.Random(2026))
     workbooks = write_workbooks(out, rows)
     file_path = workbooks[0].name if len(workbooks) == 1 else "Expenses *.xlsx"
@@ -204,11 +204,11 @@ def build_demo(out: Path, today: date | None = None, months: int | None = 12,
 def run_demo(directory: Path | None = None, serve: bool = True, open_browser: bool = True,
              port: int = 8765) -> Path:
     """Build the demo, import it, set a few budgets, and serve the dashboard; returns the folder."""
-    from expense_tracker import budgets, db
-    from expense_tracker.config import currency_symbol, database_path, display_locale, load_config
-    from expense_tracker.sync import sync, sync_statements
+    from spendscope import budgets, db
+    from spendscope.config import currency_symbol, database_path, display_locale, load_config
+    from spendscope.sync import sync, sync_statements
 
-    directory = directory or Path(tempfile.gettempdir()) / "expense-tracker-demo"
+    directory = directory or Path(tempfile.gettempdir()) / "spendscope-demo"
     built = build_demo(directory)
     cfg = load_config(built["config"])
     sync(cfg)
@@ -223,7 +223,7 @@ def run_demo(directory: Path | None = None, serve: bool = True, open_browser: bo
     print(f"\nDemo project with made-up data: {directory}")
     print(f"Try commands against it with --config '{built['config']}'")
     if serve:
-        from expense_tracker.server import serve as serve_dashboard
+        from spendscope.server import serve as serve_dashboard
         serve_dashboard(database_path(cfg), currency_symbol(cfg), "127.0.0.1", port, open_browser,
                         display_locale(cfg))
     return directory

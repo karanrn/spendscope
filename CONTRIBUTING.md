@@ -5,11 +5,11 @@ Thanks for helping. Bug reports, support for more banks, and small focused pull 
 ## Setting up
 
 ```bash
-git clone https://github.com/karanrn/expense-tracker && cd expense-tracker
+git clone https://github.com/karanrn/spendscope && cd spendscope
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e .
 python -m unittest discover -s tests -t .          # or: make test
-python -m expense_tracker demo                     # the dashboard on made-up data
+python -m spendscope demo                     # the dashboard on made-up data
 ```
 
 The tests use only the standard library's `unittest` and need no network or Google account. They build a throwaway project with a CSV source (`tests/helpers.py`).
@@ -22,7 +22,7 @@ The tests use only the standard library's `unittest` and need no network or Goog
 - **Schema changes must be additive**, with a migration in `db.initialize_database` for existing databases.
 - **Anything per source filters on `expenses.origin`** (`sheet` or `bank`).
 - **The dashboard server stays bound to localhost.** Any new route keeps the `Host` check and, for POSTs, the JSON and same-origin checks.
-- Library code raises `ExpenseTrackerError` for problems the user can fix. Only `cli.py` turns them into exit messages.
+- Library code raises `SpendScopeError` for problems the user can fix. Only `cli.py` turns them into exit messages.
 - If you change the row tuple in `report.load`, change its unpacking in `templates/dashboard.html` too.
 
 No linter or formatter is configured. Match the surrounding style.
@@ -31,7 +31,7 @@ No linter or formatter is configured. Match the surrounding style.
 
 Most banks work already, because header cells are matched by pattern (`statements.FIELD_PATTERNS`). If one doesn't:
 
-1. Get the redacted header and sample row from `python -m expense_tracker sync --statement FILE --show-headers`.
+1. Get the redacted header and sample row from `python -m spendscope sync --statement FILE --show-headers`.
 2. Prefer widening a pattern in `FIELD_PATTERNS` (the order matters, see its comment) over adding special cases.
 3. Add a test in `tests/test_statements.py` with a **made-up** statement in that bank's layout. Never commit a real one.
 
@@ -43,6 +43,6 @@ Most banks work already, because header cells are matched by pattern (`statement
 
 ## Releasing (maintainers)
 
-1. Move the "Unreleased" notes in CHANGELOG.md under the new version, and set `__version__` in `expense_tracker/__init__.py`.
+1. Move the "Unreleased" notes in CHANGELOG.md under the new version, set `__version__` in `spendscope/__init__.py`, and update the version in the README's `pipx install` line.
 2. Commit, then tag and push: `git tag v0.2.0 && git push origin main v0.2.0`.
-3. The `release` workflow runs the tests, builds, and publishes `sheets-expense-tracker` to PyPI through trusted publishing (set up once, as its header comment explains).
+3. The `release` workflow runs the tests, builds, and creates a GitHub Release for the tag with the wheel and sdist attached. Nothing is published to PyPI.

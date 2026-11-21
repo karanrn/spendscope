@@ -1,9 +1,9 @@
 import unittest
 from datetime import date, datetime
 
-from expense_tracker import ExpenseTrackerError
-from expense_tracker.parsing import header_key, parse_amount, parse_date, to_records
-from expense_tracker.sources import SheetRow, add_year_to_short_dates, gsheet_csv_url, skipped_sheet
+from spendscope import SpendScopeError
+from spendscope.parsing import header_key, parse_amount, parse_date, to_records
+from spendscope.sources import SheetRow, add_year_to_short_dates, gsheet_csv_url, skipped_sheet
 
 CFG = {
     "columns": {"date": "Date", "amount": "Expense", "category": "Label", "description": "Item"},
@@ -85,7 +85,7 @@ class ToRecordsTests(unittest.TestCase):
         self.assertEqual([r["row_key"] for r in first], [r["row_key"] for r in again])
 
     def test_missing_header_is_a_user_error(self):
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             self.records([["When", "How much"]])
 
 

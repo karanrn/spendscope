@@ -8,9 +8,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
-from expense_tracker.config import DEFAULT_CONFIG, EXAMPLE_CONFIG, user_config_dir
-from expense_tracker.template import workbook_name, write_template
+from spendscope import SpendScopeError
+from spendscope.config import DEFAULT_CONFIG, EXAMPLE_CONFIG, user_config_dir
+from spendscope.template import workbook_name, write_template
 
 SOURCES = {
     "file": "a local .xlsx/.csv workbook (no Google account needed)",
@@ -88,7 +88,7 @@ def init_project(config_path: Path | None = None, source: str | None = None, pre
         config_path = (user_config_dir() if global_config else Path.cwd()) / DEFAULT_CONFIG
     config_path = config_path.expanduser().resolve()
     if config_path.exists() and not force:
-        raise ExpenseTrackerError(f"{config_path} already exists; pass --force to replace it.")
+        raise SpendScopeError(f"{config_path} already exists; pass --force to replace it.")
     if interactive is None:
         interactive = sys.stdin.isatty() and (source is None or preset is None)
     if interactive and source is None:
@@ -97,9 +97,9 @@ def init_project(config_path: Path | None = None, source: str | None = None, pre
         preset = ask("Which currency and number format?", {k: v["name"] for k, v in PRESETS.items()}, "in")
     source, preset = source or "file", preset or "in"
     if source not in SOURCES:
-        raise ExpenseTrackerError(f"Unknown source {source!r}; choose one of {', '.join(SOURCES)}")
+        raise SpendScopeError(f"Unknown source {source!r}; choose one of {', '.join(SOURCES)}")
     if preset not in PRESETS:
-        raise ExpenseTrackerError(f"Unknown region {preset!r}; choose one of {', '.join(PRESETS)}")
+        raise SpendScopeError(f"Unknown region {preset!r}; choose one of {', '.join(PRESETS)}")
 
     text = set_key(EXAMPLE_CONFIG.read_text(encoding="utf-8"), "source", "type", source)
     for where, value in PRESETS[preset].items():
@@ -130,6 +130,6 @@ def print_next_steps(source: str, config_path: Path, workbook: Path) -> None:
         print("  1. Create a Google Cloud OAuth client (Desktop app) and save its JSON as "
               f"{config_path.parent / 'oauth_client.json'}.\n"
               "     The README's 'Connecting Google Sheets' section walks through it.")
-    print(f"  2. Check the setup:        python -m expense_tracker doctor{flag}")
-    print(f"  3. Import and explore:     python -m expense_tracker sync{flag}"
-          f" && python -m expense_tracker serve{flag}")
+    print(f"  2. Check the setup:        python -m spendscope doctor{flag}")
+    print(f"  3. Import and explore:     python -m spendscope sync{flag}"
+          f" && python -m spendscope serve{flag}")

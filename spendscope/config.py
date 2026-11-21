@@ -6,10 +6,10 @@ import sys
 import tomllib
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 DEFAULT_CONFIG = "config.toml"
-ENV_VAR = "EXPENSE_TRACKER_CONFIG"
+ENV_VAR = "SPENDSCOPE_CONFIG"
 EXAMPLE_CONFIG = Path(__file__).resolve().parent / "config.example.toml"
 
 # (section, key) entries holding file paths; relative values are relative to the config file
@@ -32,7 +32,7 @@ def user_config_dir() -> Path:
         base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
     else:
         base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return base / "expense-tracker"
+    return base / "spendscope"
 
 
 def config_candidates() -> list[Path]:
@@ -42,26 +42,26 @@ def config_candidates() -> list[Path]:
 
 
 def find_config(path: str | Path | None = None) -> Path:
-    """The config file to use: an explicit path, $EXPENSE_TRACKER_CONFIG, ./config.toml, then the
+    """The config file to use: an explicit path, $SPENDSCOPE_CONFIG, ./config.toml, then the
     per-user config."""
     if path:
         config_path = Path(path).expanduser().resolve()
         if not config_path.exists():
-            raise ExpenseTrackerError(f"Config not found: {config_path}")
+            raise SpendScopeError(f"Config not found: {config_path}")
         return config_path
     candidates = config_candidates()
     if os.environ.get(ENV_VAR):
         if not candidates[0].exists():
-            raise ExpenseTrackerError(f"Config not found: {candidates[0]} (from ${ENV_VAR})")
+            raise SpendScopeError(f"Config not found: {candidates[0]} (from ${ENV_VAR})")
         return candidates[0].resolve()
     for candidate in candidates:
         if candidate.exists():
             return candidate.resolve()
     looked = ", ".join(str(c) for c in candidates)
-    raise ExpenseTrackerError(
+    raise SpendScopeError(
         f"No config.toml found (looked in {looked}).\n"
-        "Create one with:  python -m expense_tracker init\n"
-        "or try the tool on made-up data first:  python -m expense_tracker demo")
+        "Create one with:  python -m spendscope init\n"
+        "or try the tool on made-up data first:  python -m spendscope demo")
 
 
 def load_config(path: str | Path | None = None) -> dict:
@@ -70,7 +70,7 @@ def load_config(path: str | Path | None = None) -> dict:
     try:
         cfg = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
-        raise ExpenseTrackerError(f"{config_path} is not valid TOML: {exc}") from exc
+        raise SpendScopeError(f"{config_path} is not valid TOML: {exc}") from exc
     base = config_path.parent
     cfg["_path"] = str(config_path)
     source = cfg.setdefault("source", {})
@@ -84,7 +84,7 @@ def load_config(path: str | Path | None = None) -> dict:
     cfg.setdefault("parsing", {}).setdefault("failures_log", "parse_failures.csv")
     decimal = cfg["parsing"].get("decimal_separator", ".")
     if decimal not in (".", ","):
-        raise ExpenseTrackerError(f'parsing.decimal_separator must be "." or ",", not {decimal!r}')
+        raise SpendScopeError(f'parsing.decimal_separator must be "." or ",", not {decimal!r}')
     for section, key in PATH_KEYS:
         value = cfg.get(section, {}).get(key)
         if value and not Path(value).expanduser().is_absolute():
@@ -113,7 +113,7 @@ def rules(cfg: dict) -> dict[str, list[str]]:
     for label, keywords in cfg.get("rules", {}).items():
         words = [keywords] if isinstance(keywords, str) else keywords
         if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
-            raise ExpenseTrackerError(f"[rules] {label!r} must be a keyword or a list of keywords")
+            raise SpendScopeError(f"[rules] {label!r} must be a keyword or a list of keywords")
         words = [w.strip() for w in words if w.strip()]
         if words:
             out[label] = words

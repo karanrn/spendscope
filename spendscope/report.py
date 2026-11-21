@@ -8,9 +8,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from expense_tracker import db
-from expense_tracker.budgets import all_budgets
-from expense_tracker.labels import MISSING_LABELS
+from spendscope import db
+from spendscope.budgets import all_budgets
+from spendscope.labels import MISSING_LABELS
 
 TEMPLATES = Path(__file__).resolve().parent / "templates"
 TEMPLATE = TEMPLATES / "dashboard.html"

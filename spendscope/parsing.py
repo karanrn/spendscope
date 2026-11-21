@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from datetime import date, datetime, timedelta
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 TOTAL_RE = re.compile(r"(?i)^(grand\s*|sub\s*)?totals?:?$")
 FIELDS = ["date", "amount", "category", "description", "payment", "subcategory"]
@@ -76,7 +76,7 @@ def find_headers(rows: list[list], date_col: str, amount_col: str) -> list[int]:
                if want <= {header_key(norm(c)) for c in row}]
     if headers:
         return headers
-    raise ExpenseTrackerError(
+    raise SpendScopeError(
         f"Couldn't find a header row with columns '{date_col}' and '{amount_col}'.\n"
         f"First row seen: {rows[0] if rows else '(empty sheet)'}\n"
         "Fix the names under [columns] in config.toml.")

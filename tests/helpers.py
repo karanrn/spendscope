@@ -6,7 +6,7 @@ import io
 import tempfile
 from pathlib import Path
 
-from expense_tracker.config import load_config
+from spendscope.config import load_config
 
 CONFIG = """
 [source]

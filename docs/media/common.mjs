@@ -9,7 +9,7 @@ export const freePort = () => new Promise((resolve, reject) => {
 
 // Serve the demo database with the real dashboard server; resolves once it accepts connections.
 export async function startServer(demo, port) {
-  const server = spawn(process.env.PYTHON || "python3", ["-m", "expense_tracker", "serve", "--no-open", "--port", String(port)], { cwd: demo, stdio: "ignore" });
+  const server = spawn(process.env.PYTHON || "python3", ["-m", "spendscope", "serve", "--no-open", "--port", String(port)], { cwd: demo, stdio: "ignore" });
   const started = Date.now();
   for (;;) {
     if (server.exitCode !== null) throw new Error(`dashboard server exited with code ${server.exitCode}`);

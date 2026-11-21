@@ -11,7 +11,7 @@ body:
         Instead, run this and paste its output, which masks every letter and digit of the transaction data:
 
         ```
-        python -m expense_tracker sync --statement YOUR_FILE --show-headers
+        python -m spendscope sync --statement YOUR_FILE --show-headers
         ```
   - type: input
     id: bank
@@ -46,4 +46,4 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `python -m expense_tracker --version`
+      description: Output of `python -m spendscope --version`

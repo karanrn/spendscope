@@ -3,18 +3,38 @@ from __future__ import annotations
 
 import errno
 import json
+import os
+import shutil
 import sqlite3
+import subprocess
+import sys
 import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from expense_tracker import ExpenseTrackerError, budgets, db, labels
-from expense_tracker.report import load, render_dashboard
+from spendscope import SpendScopeError, budgets, db, labels
+from spendscope.report import load, render_dashboard
 
 MAX_BODY = 8192
 LOOPBACK_NAMES = ("127.0.0.1", "localhost", "[::1]")
+
+
+def open_in_browser(url: str) -> None:
+    """Open url in the user's browser. On Linux and other non-macOS Unix systems this runs xdg-open
+    with its output discarded, because webbrowser lets the browser (Chrome especially) write its own
+    log lines, such as zygote "Broken pipe" errors, to the terminal. $BROWSER still wins when set."""
+    xdg_open = shutil.which("xdg-open")
+    if (os.name == "posix" and sys.platform != "darwin" and xdg_open
+            and not os.environ.get("BROWSER")):
+        try:
+            subprocess.Popen([xdg_open, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            return
+        except OSError:
+            pass
+    webbrowser.open_new_tab(url)  # a tab in the existing browser window, not a new window
 
 
 def allowed_hosts(host: str, port: int) -> set[str]:
@@ -61,7 +81,7 @@ def make_handler(db_path: Path, currency: str, locale: str = "en-IN") -> type[Ba
                 return
             try:
                 html = render_dashboard(load(db_path), currency, editable=True, locale=locale).encode("utf-8")
-            except ExpenseTrackerError as exc:
+            except SpendScopeError as exc:
                 self._json(500, {"error": str(exc)})
                 return
             self._send(200, html, "text/html; charset=utf-8")
@@ -84,7 +104,7 @@ def make_handler(db_path: Path, currency: str, locale: str = "en-IN") -> type[Ba
                 if not isinstance(payload, dict):
                     raise ValueError("Request body must be a JSON object")
                 handler(payload)
-            except (ValueError, ExpenseTrackerError, UnicodeDecodeError, sqlite3.Error) as exc:
+            except (ValueError, SpendScopeError, UnicodeDecodeError, sqlite3.Error) as exc:
                 self._json(400, {"error": str(exc)})
 
         def _post_budgets(self, payload: dict) -> None:
@@ -145,7 +165,8 @@ def dashboard_running(url: str) -> bool:
     """True if the server at url answers like this dashboard."""
     try:
         with urllib.request.urlopen(url, timeout=3) as response:
-            return b"Expense Dashboard" in response.read(4096)
+            head = response.read(4096)
+            return b"<title>SpendScope</title>" in head or b"Expense Dashboard" in head  # or a 0.1 server
     except OSError:
         return False
 
@@ -153,8 +174,8 @@ def dashboard_running(url: str) -> bool:
 def serve(db_path: Path, currency: str, host: str, port: int, open_browser: bool = True,
           locale: str = "en-IN") -> None:
     if not db_path.exists():
-        raise ExpenseTrackerError(
-            f"No database at {db_path}. Import your expenses first: python -m expense_tracker sync")
+        raise SpendScopeError(
+            f"No database at {db_path}. Import your expenses first: python -m spendscope sync")
     url = f"http://{host}:{port}/"
     try:
         server = ThreadingHTTPServer((host, port), make_handler(db_path, currency, locale))
@@ -164,11 +185,11 @@ def serve(db_path: Path, currency: str, host: str, port: int, open_browser: bool
         # A dashboard is already being served here: just show it again.
         print(f"Dashboard already running at {url}")
         if open_browser:
-            webbrowser.open_new_tab(url)
+            open_in_browser(url)
         return
     print(f"Editable expense dashboard: {url} (Ctrl+C to stop)")
     if open_browser:
-        webbrowser.open_new_tab(url)  # a tab in the existing browser window, not a new window
+        open_in_browser(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

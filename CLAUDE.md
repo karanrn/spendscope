@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A tool, shared publicly, that imports yearly expense workbooks (titled `Expenses YYYY`, one tab per month; Google Sheets or local `.xlsx`/`.csv`) into SQLite, then shows the data in a local dashboard. Python 3.11+, standard library plus `gspread`, `openpyxl` and `xlrd` (legacy `.xls` bank statements). Bank account statements can also be imported (`sync --statement FILE…`). `README.md` covers user setup, the Sheet template layout, and example SQL; `CONTRIBUTING.md` covers contributing and releasing. Published on PyPI as `sheets-expense-tracker` (`expense-tracker` was taken); the command is `expense-tracker`.
+A tool, shared publicly, that imports yearly expense workbooks (titled `Expenses YYYY`, one tab per month; Google Sheets or local `.xlsx`/`.csv`) into SQLite, then shows the data in a local dashboard. Python 3.11+, standard library plus `gspread`, `openpyxl` and `xlrd` (legacy `.xls` bank statements). Bank account statements can also be imported (`sync --statement FILE…`). `README.md` covers user setup, the Sheet template layout, and example SQL; `CONTRIBUTING.md` covers contributing and releasing. Named SpendScope: the package, the command and the import name are all `spendscope`. It is distributed through GitHub Releases (wheel + sdist attached for each `v*` tag), not PyPI; nothing is published on the PyPI index.
 
 ## Commands
 
@@ -13,8 +13,8 @@ make test                       # python -m unittest discover -s tests -t .
 python -m unittest tests.test_sync                                   # one module
 python -m unittest tests.test_sync.SyncTests.test_dry_run_writes_no_expenses  # one test
 
-python -m expense_tracker demo --dir /tmp/demo --no-serve   # made-up data project to try commands against
-python -m expense_tracker doctor --config /tmp/demo/config.toml
+python -m spendscope demo --dir /tmp/demo --no-serve   # made-up data project to try commands against
+python -m spendscope doctor --config /tmp/demo/config.toml
 
 make dry-run    # sync --dry-run: parse the source and preview inserts without writing
 make statement FILES='Acct_*.xls'   # sync --statement: import bank statements
@@ -23,10 +23,10 @@ make serve      # editable dashboard at http://127.0.0.1:8765
 make report     # static, view-only dashboard.html
 make run PYTHON=.venv/bin/python   # override the interpreter (a .venv exists locally)
 make build     # wheel + sdist into dist/ (needs `pip install build`)
-make media     # re-record docs/expense-tracker-demo.mp4 and docs/screenshots (node + ffmpeg, ~2 min)
+make media     # re-record docs/spendscope-demo.mp4 and docs/screenshots (node + ffmpeg, ~2 min)
 ```
 
-All entry points go through `python -m expense_tracker {init,demo,doctor,sync,serve,report,labels,budgets,template,backup}` (`expense_tracker/cli.py`). `__version__` in `expense_tracker/__init__.py` is the single version source (pyproject reads it; the release workflow checks the tag matches). The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are thin shims kept so existing commands and cron jobs keep working. Don't put logic in them.
+All entry points go through `python -m spendscope {init,demo,doctor,sync,serve,report,labels,budgets,template,backup}` (`spendscope/cli.py`). `__version__` in `spendscope/__init__.py` is the single version source (pyproject reads it; the release workflow checks the tag matches). The top-level `sync.py`, `serve.py`, `report.py` and `labels.py` are thin shims kept so existing commands and cron jobs keep working. Don't put logic in them.
 
 There is no linter or formatter configured. Tests use only `unittest` and need no network or Google credentials. They build a temp project with a CSV source and config (`tests/helpers.py`).
 
@@ -34,7 +34,7 @@ There is no linter or formatter configured. Tests use only `unittest` and need n
 
 Pipeline: `sources.read_rows` → `parsing.to_records` → `sync.sync` → SQLite (`db.py`) → `report.load` → `templates/dashboard.html`. Bank statements take a parallel path: `statements.read_statements` → `sync.sync_statements`.
 
-- **config.py**: finds and loads `config.toml`: `--config`, then `$EXPENSE_TRACKER_CONFIG`, then `./config.toml`, then the per-user config (`user_config_dir()`). Relative paths in it resolve against the config file's directory, not the working directory. It fills defaults (columns, OAuth file names: `oauth_client.json`, falling back to a legacy `service_account.json`). `config.toml` is gitignored; the documented example ships in the package as `expense_tracker/config.example.toml`, which `scaffold.init_project` (`init`) copies and edits key by key (`set_key`), so keep its keys present and in their sections.
+- **config.py**: finds and loads `config.toml`: `--config`, then `$SPENDSCOPE_CONFIG`, then `./config.toml`, then the per-user config (`user_config_dir()`). Relative paths in it resolve against the config file's directory, not the working directory. It fills defaults (columns, OAuth file names: `oauth_client.json`, falling back to a legacy `service_account.json`). `config.toml` is gitignored; the documented example ships in the package as `spendscope/config.example.toml`, which `scaffold.init_project` (`init`) copies and edits key by key (`set_key`), so keep its keys present and in their sections.
 - **sources.py**: returns raw rows (lists of cells) for each source `type`: `gsheet_api` (Drive discovery by `spreadsheet_title_pattern`, then falls back to a public XLSX download), `gsheet_csv`, or `file` (.csv/.xlsx; `file_path` may be a glob, read in sorted order). Short `M/D` API dates get their year from the workbook title here. Tabs in `skip_worksheets` are skipped. To add a new source type, add a reader here and a branch in `read_rows`.
 - **parsing.py**: finds header rows, maps the configured `[columns]` to fields, and parses dates and amounts (`decimal_separator`, `currency_code`, common currency signs). It skips summary, zero and total rows and ignores side panels next to the data. Rows that look like expenses but won't parse are returned as failures (written to `parse_failures.csv`, overwritten each sync).
 - **Row identity** (`parsing.assign_row_keys`): `row_key` = sha1 of the normalized content plus the occurrence index among identical rows. Dedup depends on this. Repeat syncs never duplicate rows, identical same-day transactions are kept separately, and an edited row becomes a new row (the old one stays unless `--mirror` is used).
@@ -49,13 +49,13 @@ Pipeline: `sources.read_rows` → `parsing.to_records` → `sync.sync` → SQLit
 
 Naming mismatch: the DB columns `category` and `description` hold what the Sheet and dashboard call **Label** and **Item**.
 
-Library code raises `ExpenseTrackerError` for problems the user can fix. Only `cli.py` turns those into exit messages.
+Library code raises `SpendScopeError` for problems the user can fix. Only `cli.py` turns those into exit messages.
 
-- **Onboarding modules**: `scaffold.py` (`init`, region presets), `demo.py` (made-up data; `build_demo` refuses to replace a non-empty folder without its `.expense-tracker-demo` marker), `doctor.py` (checks; never starts the Google sign-in itself), `template.py` (writes the bundled `templates/expenses-template.xlsx` for any year by renaming the `MonYY` tabs in the xlsx XML, because an openpyxl round-trip drops the Summary chart). `db.backup` uses SQLite's online backup API.
+- **Onboarding modules**: `scaffold.py` (`init`, region presets), `demo.py` (made-up data; `build_demo` refuses to replace a non-empty folder without its `.spendscope-demo` marker), `doctor.py` (checks; never starts the Google sign-in itself), `template.py` (writes the bundled `templates/expenses-template.xlsx` for any year by renaming the `MonYY` tabs in the xlsx XML, because an openpyxl round-trip drops the Summary chart). `db.backup` uses SQLite's online backup API.
 
 ## README media
 
-`make media` runs `docs/media/build.sh`: `make_demo.py` builds a demo project with `expense_tracker.demo.build_demo` (January to `DEMO_TODAY`, no extras) in `docs/media/build/`, `capture.py` runs the real commands for the terminal scene, `record.mjs` (Playwright) records the terminal and a scripted dashboard tour, and `shots.mjs` takes the screenshots and thumbnail. It copies the results into `docs/` and updates the video length in README.md. The demo date is pinned (`DEMO_TODAY` in `make_demo.py`, applied to the browser clock). When dashboard features change, extend the tour in `record.mjs` (it uses element IDs from `dashboard.html`) and the video description in README.md.
+`make media` runs `docs/media/build.sh`: `make_demo.py` builds a demo project with `spendscope.demo.build_demo` (January to `DEMO_TODAY`, no extras) in `docs/media/build/`, `capture.py` runs the real commands for the terminal scene, `record.mjs` (Playwright) records the terminal and a scripted dashboard tour, and `shots.mjs` takes the screenshots and thumbnail. It copies the results into `docs/` and updates the video length in README.md. The demo date is pinned (`DEMO_TODAY` in `make_demo.py`, applied to the browser clock). When dashboard features change, extend the tour in `record.mjs` (it uses element IDs from `dashboard.html`) and the video description in README.md.
 
 ## Local files not to touch or commit
 

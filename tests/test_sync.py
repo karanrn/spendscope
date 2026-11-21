@@ -2,9 +2,9 @@ import sqlite3
 import unittest
 from contextlib import closing
 
-from expense_tracker import ExpenseTrackerError, db
-from expense_tracker.config import load_config
-from expense_tracker.sync import sync
+from spendscope import SpendScopeError, db
+from spendscope.config import load_config
+from spendscope.sync import sync
 from tests.helpers import CSV_ROWS, Project, quietly
 
 
@@ -26,7 +26,7 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.cfg["source"]["file_path"], str(self.project.root / "expenses.csv"))
 
     def test_missing_config_is_a_user_error(self):
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             load_config(self.project.root / "nope.toml")
 
     def test_first_sync_imports_and_repeat_sync_adds_nothing(self):
@@ -83,7 +83,7 @@ class DatabaseTests(unittest.TestCase):
     def test_connect_requires_existing_database_unless_creating(self):
         project = Project()
         self.addCleanup(project.cleanup)
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             db.connect(project.root / "missing.db")
 
 

@@ -6,13 +6,13 @@ import sqlite3
 import unittest
 from contextlib import closing
 
-from expense_tracker import ExpenseTrackerError, db, labels
-from expense_tracker.cli import main
-from expense_tracker.config import database_path
-from expense_tracker.parsing import parse_amount
-from expense_tracker.report import load, render_dashboard
-from expense_tracker.statements import describe_statement, read_statement, redact
-from expense_tracker.sync import sync, sync_statements
+from spendscope import SpendScopeError, db, labels
+from spendscope.cli import main
+from spendscope.config import database_path
+from spendscope.parsing import parse_amount
+from spendscope.report import load, render_dashboard
+from spendscope.statements import describe_statement, read_statement, redact
+from spendscope.sync import sync, sync_statements
 from tests.helpers import CSV_ROWS, Project, add_config, quietly, write_statements
 
 
@@ -124,7 +124,7 @@ class RuleTests(unittest.TestCase):
 
     def test_bad_rules_are_a_user_error(self):
         add_config(self.project, "[rules]\nFood = 3")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             quietly(sync, self.project.config())
 
 
@@ -140,7 +140,7 @@ class FileGlobTests(unittest.TestCase):
             _, out = quietly(sync, project.config())
             self.assertIn("new: 4", out)
             config.write_text(config.read_text().replace('"20*.csv"', '"19*.csv"'), encoding="utf-8")
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 sync(project.config())
         finally:
             project.cleanup()

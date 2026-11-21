@@ -11,14 +11,14 @@ from contextlib import closing
 from pathlib import Path
 from unittest import mock
 
-from expense_tracker import ExpenseTrackerError, __version__, db
-from expense_tracker.cli import main
-from expense_tracker.config import ENV_VAR, database_path, find_config, load_config
-from expense_tracker.demo import build_demo
-from expense_tracker.doctor import run_doctor
-from expense_tracker.scaffold import init_project, set_key
-from expense_tracker.sync import sync, sync_statements
-from expense_tracker.template import write_template
+from spendscope import SpendScopeError, __version__, db
+from spendscope.cli import main
+from spendscope.config import ENV_VAR, database_path, find_config, load_config
+from spendscope.demo import build_demo
+from spendscope.doctor import run_doctor
+from spendscope.scaffold import init_project, set_key
+from spendscope.sync import sync, sync_statements
+from spendscope.template import write_template
 from tests.helpers import Project, quietly
 
 
@@ -36,7 +36,7 @@ class TempDirTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name).resolve()
-        # keep the real per-user config and $EXPENSE_TRACKER_CONFIG out of the tests
+        # keep the real per-user config and $SPENDSCOPE_CONFIG out of the tests
         env = {k: v for k, v in os.environ.items() if k != ENV_VAR}
         env["XDG_CONFIG_HOME"] = env["APPDATA"] = str(self.root / "user-config")
         self._env = mock.patch.dict(os.environ, env, clear=True)
@@ -49,7 +49,7 @@ class TempDirTest(unittest.TestCase):
 
 class ConfigDiscoveryTests(TempDirTest):
     def test_order_is_env_then_working_dir_then_user_config(self):
-        user = self.root / "user-config" / "expense-tracker" / "config.toml"
+        user = self.root / "user-config" / "spendscope" / "config.toml"
         user.parent.mkdir(parents=True)
         user.write_text("", encoding="utf-8")
         work = self.root / "work"
@@ -64,7 +64,7 @@ class ConfigDiscoveryTests(TempDirTest):
                 self.assertEqual(find_config(), other)
 
     def test_no_config_points_to_init_and_demo(self):
-        with in_dir(self.root), self.assertRaises(ExpenseTrackerError) as cm:
+        with in_dir(self.root), self.assertRaises(SpendScopeError) as cm:
             find_config()
         self.assertIn("init", str(cm.exception))
         self.assertIn("demo", str(cm.exception))
@@ -72,7 +72,7 @@ class ConfigDiscoveryTests(TempDirTest):
     def test_missing_env_config_is_an_error_not_a_fallback(self):
         (self.root / "config.toml").write_text("", encoding="utf-8")
         with in_dir(self.root), mock.patch.dict(os.environ, {ENV_VAR: str(self.root / "nope.toml")}):
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 find_config()
 
     def test_defaults_and_legacy_oauth_file_name(self):
@@ -87,10 +87,10 @@ class ConfigDiscoveryTests(TempDirTest):
     def test_bad_decimal_separator_and_bad_toml(self):
         config = self.root / "config.toml"
         config.write_text('[parsing]\ndecimal_separator = ";"\n', encoding="utf-8")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             load_config(config)
         config.write_text("[parsing\n", encoding="utf-8")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             load_config(config)
 
 
@@ -110,7 +110,7 @@ class InitTests(TempDirTest):
         from openpyxl import load_workbook
         self.assertEqual(load_workbook(written[1])["Mar" + written[1].stem[-2:]]["B1"].value, "Expense(USD)")
         quietly(sync, cfg)  # the empty template imports cleanly
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             quietly(init_project, config, "file", "us", interactive=False)
         quietly(init_project, config, "gsheet_api", "eu", force=True, interactive=False)
         cfg = load_config(config)
@@ -118,12 +118,12 @@ class InitTests(TempDirTest):
 
     def test_global_writes_the_user_config(self):
         written, _ = quietly(init_project, None, "gsheet_csv", "uk", global_config=True, interactive=False)
-        self.assertEqual(written, [self.root / "user-config" / "expense-tracker" / "config.toml"])
+        self.assertEqual(written, [self.root / "user-config" / "spendscope" / "config.toml"])
 
     def test_unknown_choices_are_rejected(self):
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             init_project(self.root / "c.toml", "dropbox", "in", interactive=False)
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             init_project(self.root / "c.toml", "file", "mars", interactive=False)
 
     def test_set_key_is_section_aware_and_keeps_comments(self):
@@ -133,7 +133,7 @@ class InitTests(TempDirTest):
             set_key(text, "c", "x", "v")
 
     def test_example_config_is_valid_toml(self):
-        from expense_tracker.config import EXAMPLE_CONFIG
+        from spendscope.config import EXAMPLE_CONFIG
         tomllib.loads(EXAMPLE_CONFIG.read_text(encoding="utf-8"))
 
 
@@ -148,7 +148,7 @@ class TemplateTests(TempDirTest):
         self.assertEqual(wb.sheetnames, ["Summary"] + [f"{m}27" for m in
                          "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()])
         self.assertIn("'Jan27'!G4", wb["Summary"]["C31"].value)
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             write_template(out, 2027)
 
     def test_cli_writes_into_a_folder(self):
@@ -170,7 +170,7 @@ class DemoTests(TempDirTest):
         keep = self.root / "mine"
         keep.mkdir()
         (keep / "notes.txt").write_text("keep me", encoding="utf-8")
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             build_demo(keep)
         self.assertTrue((keep / "notes.txt").exists())
 
@@ -199,7 +199,7 @@ class DoctorAndBackupTests(unittest.TestCase):
         config = self.project.config_path
         config.write_text(config.read_text().replace('type = "file"', 'type = "gsheet_api"'), encoding="utf-8")
         (self.project.root / "oauth_client.json").write_text("{}", encoding="utf-8")
-        with mock.patch("expense_tracker.sources.read_google_api") as read:
+        with mock.patch("spendscope.sources.read_google_api") as read:
             ok, out = quietly(run_doctor, str(config))
         read.assert_not_called()
         self.assertTrue(ok)
@@ -213,7 +213,7 @@ class DoctorAndBackupTests(unittest.TestCase):
         self.assertEqual(len(copies), 1)
         with closing(sqlite3.connect(copies[0])) as con:
             self.assertEqual(con.execute("SELECT COUNT(*) FROM expenses").fetchone()[0], 3)
-        with self.assertRaises(ExpenseTrackerError):
+        with self.assertRaises(SpendScopeError):
             db.backup(database_path(cfg), copies[0])  # never overwrites
 
     def test_version(self):

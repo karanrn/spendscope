@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild docs/expense-tracker-demo.mp4 and docs/screenshots/ from made-up demo data (make media).
+# Rebuild docs/spendscope-demo.mp4 and docs/screenshots/ from made-up demo data (make media).
 # Needs Python with requirements.txt installed, node/npm (Playwright and its Chromium are installed
 # here on first run) and ffmpeg. On a bare Linux, Chromium may also need: npx playwright install-deps
 # Work happens in build/.
@@ -34,7 +34,7 @@ ffmpeg -v error -y -i "$build/walkthrough.webm" -c:v libx264 -preset slow -crf 2
 echo "== Screenshots"
 node "$here/shots.mjs" "$build/demo" "$build"
 
-cp "$build/walkthrough.mp4" "$repo/docs/expense-tracker-demo.mp4"
+cp "$build/walkthrough.mp4" "$repo/docs/spendscope-demo.mp4"
 cp "$build"/screenshots/* "$repo/docs/screenshots/"
 seconds="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$build/walkthrough.mp4" | awk '{printf "%d", $1 + 0.5}')"
 "$PYTHON" - "$repo/README.md" "$seconds" <<'PY'
@@ -43,5 +43,5 @@ from pathlib import Path
 readme = Path(sys.argv[1])
 readme.write_text(re.sub(r"\d+-second walkthrough", f"{sys.argv[2]}-second walkthrough", readme.read_text(encoding="utf-8")), encoding="utf-8")
 PY
-echo "Updated docs/expense-tracker-demo.mp4, docs/screenshots/ and the video length in README.md (${seconds}s)."
+echo "Updated docs/spendscope-demo.mp4, docs/screenshots/ and the video length in README.md (${seconds}s)."
 echo "If the tour or the features changed, also check the video description in README.md."

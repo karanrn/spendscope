@@ -12,7 +12,7 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 TEMPLATE_XLSX = Path(__file__).resolve().parent / "templates" / "expenses-template.xlsx"
 TEMPLATE_YEAR = 2026
@@ -30,9 +30,9 @@ def write_template(out: Path, year: int | None = None, force: bool = False,
     The amount column is headed Expense(<currency_code>)."""
     year = year or date.today().year
     if not 1900 <= year <= 9999:
-        raise ExpenseTrackerError(f"Year must be between 1900 and 9999, not {year}")
+        raise SpendScopeError(f"Year must be between 1900 and 9999, not {year}")
     if out.exists() and not force:
-        raise ExpenseTrackerError(f"{out} already exists; pass --force to overwrite it.")
+        raise SpendScopeError(f"{out} already exists; pass --force to overwrite it.")
     suffix = f"{year % 100:02d}"
     code = re.sub(r"[^A-Za-z]", "", currency_code or "")[:3].upper()
     header = f"Expense({code})" if code else "Expense"

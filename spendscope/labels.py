@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import sqlite3
 
-from expense_tracker import ExpenseTrackerError
-from expense_tracker.db import timestamp
+from spendscope import SpendScopeError
+from spendscope.db import timestamp
 
 MAX_LABEL_LENGTH = 80
 # Label (category) values that mean "no Label yet": bank imports store "", and sheet rows
@@ -17,7 +17,7 @@ def clean_label(label: str) -> str:
     """Strip a label and reject empty, overlong or control-character labels."""
     label = (label or "").strip()
     if not label or len(label) > MAX_LABEL_LENGTH or any(ord(c) < 32 for c in label):
-        raise ExpenseTrackerError(f"Label must contain 1–{MAX_LABEL_LENGTH} printable characters")
+        raise SpendScopeError(f"Label must contain 1–{MAX_LABEL_LENGTH} printable characters")
     return label
 
 

@@ -1,11 +1,11 @@
 import json
 import unittest
 
-from expense_tracker import ExpenseTrackerError, budgets, db
-from expense_tracker.cli import main
-from expense_tracker.config import database_path
-from expense_tracker.report import load
-from expense_tracker.sync import sync
+from spendscope import SpendScopeError, budgets, db
+from spendscope.cli import main
+from spendscope.config import database_path
+from spendscope.report import load
+from spendscope.sync import sync
 from tests.helpers import Project, quietly
 
 
@@ -43,13 +43,13 @@ class BudgetTests(unittest.TestCase):
 
     def test_validation(self):
         for amount in (0, -5, "abc", None, True, float("nan"), float("inf")):
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 budgets.set_budget(self.con, "Food", amount)
         for month in ("2026-13", "2026-1", "Jan26"):
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 budgets.set_budget(self.con, "Food", 100, month)
         for label in ("", "Uncategorized", "unlabeled"):
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 budgets.set_budget(self.con, label, 100)
 
     def test_dashboard_data_includes_budgets(self):

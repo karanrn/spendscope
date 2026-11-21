@@ -1,12 +1,12 @@
 # Shortcuts for the common commands. Without make (e.g. on Windows), run the commands after
-# each target directly: python -m expense_tracker <command>.
+# each target directly: python -m spendscope <command>.
 PYTHON ?= python3
-APP = $(PYTHON) -m expense_tracker
+APP = $(PYTHON) -m spendscope
 
 .PHONY: help init demo doctor sync dry-run statement serve report report-open run backup test build media
 
 help:
-	@echo "Expense tracker targets:"
+	@echo "SpendScope targets:"
 	@echo "  make demo        Try the dashboard on made-up data"
 	@echo "  make init        Write a starter config.toml"
 	@echo "  make doctor      Check the config, credentials and source"

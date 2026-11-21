@@ -18,7 +18,7 @@ from datetime import date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 # Field → pattern for a header cell after header_key() (lower-case letters only). A cell
 # belongs to the first field, in this order, whose pattern it matches; each field takes
@@ -102,11 +102,11 @@ def read_tables(path: Path) -> list[list[list]]:
         try:
             import xlrd
         except ImportError:
-            raise ExpenseTrackerError("Reading .xls statements needs xlrd: pip install -r requirements.txt")
+            raise SpendScopeError("Reading .xls statements needs xlrd: pip install -r requirements.txt")
         try:
             book = xlrd.open_workbook(str(path))
         except xlrd.XLRDError as exc:
-            raise ExpenseTrackerError(f"{path.name}: not a readable .xls file ({exc})")
+            raise SpendScopeError(f"{path.name}: not a readable .xls file ({exc})")
         sheet = book.sheet_by_index(0)
         return [[[xlrd.xldate_as_datetime(c.value, book.datemode) if c.ctype == xlrd.XL_CELL_DATE else c.value
                   for c in sheet.row(i)] for i in range(sheet.nrows)]]
@@ -159,7 +159,7 @@ def find_columns(tables: list[list[list]], overrides: dict[str, list[str]],
     _, cells, cols = best
     seen = f"\nClosest row: {cells}" if cells else ""
     found = f" (recognised: {', '.join(sorted(cols))})" if cols else ""
-    raise ExpenseTrackerError(
+    raise SpendScopeError(
         f"{name}: couldn't find the transaction header. It needs a date, a narration/description,"
         f" and debit + credit columns or a single amount column.{seen}{found}\n"
         "Name the headers under [statements.columns] in config.toml.")
@@ -225,7 +225,7 @@ def statement_options(cfg: dict | None) -> tuple[dict[str, list[str]], tuple[str
     columns = {f: as_list(v) for f, v in section.get("columns", {}).items() if as_list(v)}
     unknown = set(columns) - set(FIELDS)
     if unknown:
-        raise ExpenseTrackerError(f"Unknown [statements.columns] keys: {', '.join(sorted(unknown))}. "
+        raise SpendScopeError(f"Unknown [statements.columns] keys: {', '.join(sorted(unknown))}. "
                                   f"Use: {', '.join(FIELDS)}")
     return columns, tuple(section.get("date_formats", ())) + DATE_FORMATS, decimal
 
@@ -233,7 +233,7 @@ def statement_options(cfg: dict | None) -> tuple[dict[str, list[str]], tuple[str
 def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], list[dict]]:
     """Return (withdrawal records, deposit records) from one statement file."""
     if not path.exists():
-        raise ExpenseTrackerError(f"Statement not found: {path}")
+        raise SpendScopeError(f"Statement not found: {path}")
     overrides, formats, decimal = statement_options(cfg)
     rows, header, cols = find_columns(read_tables(path), overrides, path.name)
 
@@ -259,7 +259,7 @@ def read_statement(path: Path, cfg: dict | None = None) -> tuple[list[dict], lis
             debit, credit = split_amount(r, cell, cols, decimal)
             balance = parse_amount(cell(r, "balance"), decimal)[0]
         except ValueError:
-            raise ExpenseTrackerError(f"{path.name}: unreadable amount in row {r}")
+            raise SpendScopeError(f"{path.name}: unreadable amount in row {r}")
         ref = str(cell(r, "ref")).strip()
         if debit <= 0 and credit <= 0:
             continue
@@ -332,11 +332,11 @@ def describe_statement(path: Path, cfg: dict | None = None) -> str:
     """What the parser makes of a statement, with transaction data redacted: the header row
     and the column each field was read from, or the closest header row when none fits."""
     if not path.exists():
-        raise ExpenseTrackerError(f"Statement not found: {path}")
+        raise SpendScopeError(f"Statement not found: {path}")
     overrides, formats, _ = statement_options(cfg)
     try:
         rows, header, cols = find_columns(read_tables(path), overrides, path.name)
-    except ExpenseTrackerError as exc:
+    except SpendScopeError as exc:
         return str(exc)
     head = rows[header]
     lines = [f"{path.name}: header found on row {header + 1}",

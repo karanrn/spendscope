@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Expense Dashboard</title>
+<title>SpendScope</title>
 <script>/*__CHARTJS__*/</script>
 <style>
 :root {
@@ -136,7 +136,7 @@ button.tag-pill { cursor: pointer; }
 <body>
 <div class="wrap">
   <header>
-    <h1>Expenses</h1>
+    <h1>SpendScope</h1>
     <div class="meta" id="meta"></div>
   </header>
 
@@ -658,7 +658,7 @@ function renderBudgets() {
     return `<tr class="${b.diff > 0 ? "over" : ""}"><td><i style="background:var(${slotVar(ROWS.find(r => r.c.toLowerCase() === b.label.toLowerCase())?.c ?? b.label)})"></i>${esc(b.label)}${b.only ? ` <span class="meta">· ${monthName(m)} only</span>` : ""}</td>` +
       `<td class="num">${edit(b)}${fmt(b.amount)}${remove(b)}</td><td class="num">${fmt(b.spent)}</td><td class="num">${overUnder(b)}</td><td class="num">${vsBudget(b)}</td>` +
       `<td><div class="bar" title="${(b.ratio * 100).toFixed(0)}% of budget used"><span class="${cls}" style="width:${Math.min(b.ratio, 1) * 100}%"></span>${pace !== null ? `<b style="left:${pace * 100}%"></b>` : ""}</div></td></tr>`;
-  }).join("") : `<tr><td colspan="6" class="empty">No budgets for ${monthName(m)}. ${DATA.editable ? "Add one below." : "Set them in the dashboard from <code>python -m expense_tracker serve</code>, or with <code>python -m expense_tracker budgets set Food 8000</code>."}</td></tr>`;
+  }).join("") : `<tr><td colspan="6" class="empty">No budgets for ${monthName(m)}. ${DATA.editable ? "Add one below." : "Set them in the dashboard from <code>python -m spendscope serve</code>, or with <code>python -m spendscope budgets set Food 8000</code>."}</td></tr>`;
   const total = { amount: rows.reduce((s, b) => s + b.amount, 0), spent: rows.reduce((s, b) => s + b.spent, 0) };
   total.diff = total.spent - total.amount; total.ratio = total.spent / (total.amount || 1);
   document.getElementById("budget-foot").innerHTML = rows.length > 1
@@ -689,7 +689,7 @@ async function saveBudget(label, amount, month, control) {
     renderBudgets();
     return true;
   } catch (error) {
-    status.textContent = `Could not save budget: ${error.message}. Open the dashboard with: python -m expense_tracker serve`;
+    status.textContent = `Could not save budget: ${error.message}. Open the dashboard with: python -m spendscope serve`;
     return false;
   } finally {
     if (control) control.disabled = false;
@@ -788,7 +788,7 @@ async function changeLabel(expenseId, label, action, control) {
     status.textContent = `${VERBS[action][1]} “${action === "set_primary" ? result.category : label}” in the database.`;
     render();
   } catch (error) {
-    status.textContent = `Could not save label: ${error.message}. Open the dashboard with: python -m expense_tracker serve`;
+    status.textContent = `Could not save label: ${error.message}. Open the dashboard with: python -m spendscope serve`;
   } finally {
     if (control) control.disabled = false;
   }
@@ -809,7 +809,7 @@ document.getElementById("tbody").addEventListener("click", e => {
 document.getElementById("meta").textContent =
   (DATA.lastSync ? `Last synced ${DATA.lastSync.replace("T", " ")}` : "") + ` · ${num(ROWS.length)} expenses stored`;
 if (!ROWS.length) {
-  document.querySelector(".wrap").innerHTML += `<div class="card empty">No expenses yet. Import some with <code>python -m expense_tracker sync</code>, or try <code>python -m expense_tracker demo</code>.</div>`;
+  document.querySelector(".wrap").innerHTML += `<div class="card empty">No expenses yet. Import some with <code>python -m spendscope sync</code>, or try <code>python -m spendscope demo</code>.</div>`;
 } else {
   render();
   // re-color charts if the OS theme flips

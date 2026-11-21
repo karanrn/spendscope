@@ -1,4 +1,4 @@
-"""Build the README media's demo project: expense_tracker.demo's made-up data for January to
+"""Build the README media's demo project: spendscope.demo's made-up data for January to
 October 2026 (no income or rules, so the recorded commands show the basics), plus a copy of the
 code so the recorded commands run as they would in a checkout.
 
@@ -13,11 +13,11 @@ from pathlib import Path
 
 repo, out = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(repo))
-from expense_tracker.demo import build_demo  # noqa: E402
+from spendscope.demo import build_demo  # noqa: E402
 
 DEMO_TODAY = date(2026, 10, 23)
 built = build_demo(out, DEMO_TODAY, months=None, extras=False)
-shutil.copytree(repo / "expense_tracker", out / "expense_tracker", ignore=shutil.ignore_patterns("__pycache__"))
+shutil.copytree(repo / "spendscope", out / "spendscope", ignore=shutil.ignore_patterns("__pycache__"))
 for name in ("Makefile", "sync.py", "serve.py", "report.py", "labels.py"):
     shutil.copy(repo / name, out / name)
 print(built["rows"], "sheet rows")

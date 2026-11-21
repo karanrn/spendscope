@@ -16,11 +16,11 @@ import sqlite3
 from collections import Counter
 from pathlib import Path
 
-from expense_tracker import db, labels
-from expense_tracker.config import database_path, rules
-from expense_tracker.parsing import to_records
-from expense_tracker.sources import read_rows
-from expense_tracker.statements import read_statements
+from spendscope import db, labels
+from spendscope.config import database_path, rules
+from spendscope.parsing import to_records
+from spendscope.sources import read_rows
+from spendscope.statements import read_statements
 
 FAILURE_COLUMNS = ["source", "reason", "date", "amount", "category", "description", "row"]
 

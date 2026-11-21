@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>expense-tracker — zsh</title>
+<title>spendscope — zsh</title>
 <style>
 :root { --bg: #0b0e13; --win: #11151c; --bar: #161b23; --text: #c9d1d9; --dim: #7d8590; --green: #3fb950; --blue: #58a6ff; --cyan: #79c0ff; }
 * { box-sizing: border-box; }
@@ -21,7 +21,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
 </head>
 <body>
 <div class="win">
-  <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>expense-tracker — zsh</span></div>
+  <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>spendscope — zsh</span></div>
   <div id="term"></div>
 </div>
 <script>
@@ -29,7 +29,7 @@ const STEPS = /*__STEPS__*/[];
 const term = document.getElementById("term");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const esc = s => s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-const promptHtml = '<span class="prompt">➜</span> <span class="cwd">expense-tracker</span> ';
+const promptHtml = '<span class="prompt">➜</span> <span class="cwd">spendscope</span> ';
 function line(html) { const d = document.createElement("div"); d.innerHTML = html || " "; term.appendChild(d); term.scrollTop = term.scrollHeight; return d; }
 // lines worth drawing the eye to: results and summaries
 const style = (text, i) => i === 0 && /^python3 /.test(text) ? `<span class="echo">${esc(text)}</span>`

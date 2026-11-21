@@ -20,15 +20,15 @@ Easier to set up and use outside India.
 - A "Download CSV" button for the transactions table, honouring the filters, the search and the month.
 - `[display] locale` for number and month formatting in the dashboard, `[parsing] decimal_separator` (`","` reads `1.234,56`) and `[parsing] currency_code`.
 - `file_path` accepts a glob such as `"Expenses *.xlsx"`, to read one workbook per year.
-- The config is found from `--config`, then `$EXPENSE_TRACKER_CONFIG`, then `./config.toml`, then the per-user config (`~/.config/expense-tracker/config.toml`, or `%APPDATA%\expense-tracker` on Windows).
-- `--version`, and packaging for PyPI as `sheets-expense-tracker` (`pipx install sheets-expense-tracker`).
+- The config is found from `--config`, then `$SPENDSCOPE_CONFIG`, then `./config.toml`, then the per-user config (`~/.config/spendscope/config.toml`, or `%APPDATA%\spendscope` on Windows).
+- `--version`, and packaging as `spendscope`: each version tag publishes a wheel and sdist to GitHub Releases (it is not on PyPI). Install with `pipx install git+https://github.com/karanrn/spendscope@v0.2.0`, then run `spendscope <command>`.
 
 ### Changed
 - Chart.js is bundled into the dashboard, so it works offline and makes no third-party requests.
-- `config.toml` is no longer tracked in git. **If you cloned the repository, copy your `config.toml` somewhere safe before pulling**, because git deletes the tracked file. Copy it back afterwards. The example config now lives at `expense_tracker/config.example.toml`.
+- `config.toml` is no longer tracked in git. **If you cloned the repository, copy your `config.toml` somewhere safe before pulling**, because git deletes the tracked file. Copy it back afterwards. The example config now lives at `spendscope/config.example.toml`.
 - The default OAuth client file is `oauth_client.json`. An existing `service_account.json` is still used when the config doesn't name one.
-- The template workbook moved to `expense_tracker/templates/expenses-template.xlsx`. Use `python -m expense_tracker template` to get a copy.
-- Help text and messages use `python -m expense_tracker …` throughout.
+- The template workbook moved to `spendscope/templates/expenses-template.xlsx`. Use `python -m spendscope template` to get a copy.
+- Help text and messages use `python -m spendscope …` throughout.
 
 ## 0.1.0
 

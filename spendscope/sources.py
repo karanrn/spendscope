@@ -9,8 +9,8 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
-from expense_tracker.parsing import header_key, norm
+from spendscope import SpendScopeError
+from spendscope.parsing import header_key, norm
 
 
 class SheetRow(list):
@@ -32,7 +32,7 @@ def read_rows(src: dict, columns: dict | None = None) -> tuple[list[list], str]:
         return read_google_api(src)
     if kind == "file":
         return read_file(src)
-    raise ExpenseTrackerError(f"Unknown source type: {kind}")
+    raise SpendScopeError(f"Unknown source type: {kind}")
 
 
 def skipped_sheet(title: str, src: dict) -> bool:
@@ -46,17 +46,17 @@ def source_files(src: dict) -> list[Path]:
     """The files a `file` source reads: file_path, which may be a glob such as "Expenses *.xlsx"."""
     pattern = src.get("file_path") or ""
     if not pattern:
-        raise ExpenseTrackerError('Set source.file_path in config.toml (for example "Expenses 2026.xlsx")')
+        raise SpendScopeError('Set source.file_path in config.toml (for example "Expenses 2026.xlsx")')
     if glob.has_magic(pattern):
         files = sorted(Path(f) for f in glob.glob(pattern))
         if not files:
-            raise ExpenseTrackerError(f"No files match source.file_path {pattern!r}")
+            raise SpendScopeError(f"No files match source.file_path {pattern!r}")
         return files
     path = Path(pattern)
     if not path.exists():
-        raise ExpenseTrackerError(
+        raise SpendScopeError(
             f"Source file not found: {path}\n"
-            "Create a workbook from the template with:  python -m expense_tracker template")
+            "Create a workbook from the template with:  python -m spendscope template")
     return [path]
 
 
@@ -81,7 +81,7 @@ def workbook_rows(content: bytes, name: str, file_sheet: str = "",
     try:
         import openpyxl
     except ImportError:
-        raise ExpenseTrackerError("pip install openpyxl   (needed to read .xlsx workbooks)") from None
+        raise SpendScopeError("pip install openpyxl   (needed to read .xlsx workbooks)") from None
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     worksheets = ([wb[file_sheet]] if file_sheet else
                   [ws for ws in wb.worksheets if not skipped_sheet(ws.title, src or {})])
@@ -102,7 +102,7 @@ def gsheet_csv_url(url: str) -> str:
         return url
     m = re.search(r"/spreadsheets/d/(e/)?([a-zA-Z0-9_-]+)", url)
     if not m:
-        raise ExpenseTrackerError(f"Can't find a sheet ID in: {url}")
+        raise SpendScopeError(f"Can't find a sheet ID in: {url}")
     gid = re.search(r"[#&?]gid=(\d+)", url)
     gid_part = f"&gid={gid.group(1)}" if gid else ""
     if m.group(1):  # "Publish to web" link: /d/e/<id>/pub...
@@ -117,12 +117,12 @@ def read_public_csv(src: dict) -> tuple[list[list], str]:
         with urllib.request.urlopen(req, timeout=30) as r:
             text = r.read().decode("utf-8-sig")
     except Exception as e:
-        raise ExpenseTrackerError(
+        raise SpendScopeError(
             f"Couldn't download the sheet ({e}).\n"
             "Check it's shared as 'Anyone with the link can view', "
             "or switch to type = \"gsheet_api\" in config.toml.") from e
     if text.lstrip().lower().startswith("<!doctype html") or "<html" in text[:500].lower():
-        raise ExpenseTrackerError(
+        raise SpendScopeError(
             "Google returned a sign-in page, so the sheet isn't public. "
             "Share it as 'Anyone with the link can view', or use gsheet_api.")
     return ([SheetRow(r, f"gsheet:{i}") for i, r in enumerate(csv.reader(io.StringIO(text)), 1)],
@@ -157,7 +157,7 @@ def read_google_api(src: dict) -> tuple[list[list], str]:
         import gspread
         from google.auth.exceptions import RefreshError
     except ImportError:
-        raise ExpenseTrackerError(
+        raise SpendScopeError(
             "pip install -r requirements.txt   (gspread is needed for the Google Sheets API; "
             "if you use a virtualenv, run with its Python)") from None
     gc = None
@@ -170,7 +170,7 @@ def read_google_api(src: dict) -> tuple[list[list], str]:
         )
         spreadsheets = yearly_spreadsheets(gc, src)
     except RefreshError as exc:
-        raise ExpenseTrackerError(
+        raise SpendScopeError(
             f"The cached Google token in {src['oauth_token_json']} has expired or been revoked ({exc}). "
             "Delete that file and sync again to sign in. If this recurs weekly, your OAuth consent "
             "screen is in Testing mode, whose tokens last 7 days; publish the app to stop that."
@@ -178,7 +178,7 @@ def read_google_api(src: dict) -> tuple[list[list], str]:
     except Exception as api_error:
         sid = spreadsheet_id(src)
         if not sid:
-            raise ExpenseTrackerError(
+            raise SpendScopeError(
                 "Could not discover yearly Google spreadsheets. Automatic title discovery requires "
                 "the Google Drive API to be enabled for the OAuth app's Google Cloud project. "
                 f"API error: {api_error}. Enable the Google Drive API and retry, or set source.sheet_id "
@@ -190,7 +190,7 @@ def read_google_api(src: dict) -> tuple[list[list], str]:
     try:
         loaded = [read_api_workbook(gc, spec, src) for spec in spreadsheets]
     except Exception as exc:
-        raise ExpenseTrackerError(str(exc)) from exc
+        raise SpendScopeError(str(exc)) from exc
     rows = []
     sources = []
     for workbook, source in loaded:

@@ -4,12 +4,14 @@ import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
-from expense_tracker import ExpenseTrackerError, db, labels
-from expense_tracker.cli import main
-from expense_tracker.config import database_path
-from expense_tracker.server import make_handler
-from expense_tracker.sync import sync, sync_statements
+from spendscope import SpendScopeError, db, labels
+from spendscope.cli import main
+from spendscope.config import database_path
+from spendscope import server
+from spendscope.server import make_handler
+from spendscope.sync import sync, sync_statements
 from tests.helpers import Project, quietly, write_statements
 
 
@@ -39,7 +41,7 @@ class LabelTests(unittest.TestCase):
     def test_label_validation(self):
         self.assertEqual(labels.clean_label("  Work "), "Work")
         for bad in ("", "   ", "x" * 81, "tab\there"):
-            with self.assertRaises(ExpenseTrackerError):
+            with self.assertRaises(SpendScopeError):
                 labels.clean_label(bad)
 
     def test_cli_accepts_config_before_or_after_action(self):
@@ -79,7 +81,7 @@ class ServerTests(unittest.TestCase):
     def test_dashboard_page_embeds_editable_data(self):
         with urllib.request.urlopen(self.base + "/") as res:
             html = res.read().decode()
-        self.assertIn("Expense Dashboard", html)
+        self.assertIn("<title>SpendScope</title>", html)
         self.assertIn('"editable":true', html)
         self.assertIn("Coffee and sandwich", html)
         self.assertIn('"missingLabels":["","Uncategorized"]', html)
@@ -141,6 +143,31 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(self.status("/api/labels", headers, body), 403, headers)
         same_origin = {"Content-Type": "application/json", "Origin": self.base}
         self.assertEqual(self.status("/api/labels", same_origin, body), 200)
+
+
+class OpenInBrowserTests(unittest.TestCase):
+    def test_xdg_open_output_is_discarded(self):
+        with mock.patch.object(server.os, "name", "posix"), \
+                mock.patch.object(server.sys, "platform", "linux"), \
+                mock.patch.dict(server.os.environ, {}, clear=False) as env, \
+                mock.patch.object(server.shutil, "which", return_value="/usr/bin/xdg-open"), \
+                mock.patch.object(server.subprocess, "Popen") as popen, \
+                mock.patch.object(server.webbrowser, "open_new_tab") as fallback:
+            env.pop("BROWSER", None)
+            server.open_in_browser("http://127.0.0.1:8765/")
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0], ["/usr/bin/xdg-open", "http://127.0.0.1:8765/"])
+        self.assertIs(popen.call_args.kwargs["stdout"], server.subprocess.DEVNULL)
+        self.assertIs(popen.call_args.kwargs["stderr"], server.subprocess.DEVNULL)
+        fallback.assert_not_called()
+
+    def test_browser_env_var_uses_webbrowser(self):
+        with mock.patch.dict(server.os.environ, {"BROWSER": "firefox"}), \
+                mock.patch.object(server.subprocess, "Popen") as popen, \
+                mock.patch.object(server.webbrowser, "open_new_tab") as fallback:
+            server.open_in_browser("http://127.0.0.1:8765/")
+        popen.assert_not_called()
+        fallback.assert_called_once_with("http://127.0.0.1:8765/")
 
 
 if __name__ == "__main__":

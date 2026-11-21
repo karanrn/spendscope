@@ -5,7 +5,7 @@ import importlib.util
 import sqlite3
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 OK, WARN, FAIL = "ok  ", "warn", "FAIL"
 
@@ -23,17 +23,17 @@ class Report:
 
 def run_doctor(config: str | None = None, offline: bool = False) -> bool:
     """Print one line per check; returns True when nothing failed."""
-    from expense_tracker.config import database_path, find_config, load_config, rules
-    from expense_tracker.parsing import to_records
-    from expense_tracker.sources import read_rows
-    from expense_tracker.statements import statement_options
+    from spendscope.config import database_path, find_config, load_config, rules
+    from spendscope.parsing import to_records
+    from spendscope.sources import read_rows
+    from spendscope.statements import statement_options
 
     report = Report()
     try:
         path = find_config(config)
         cfg = load_config(path)
         report.line(OK, f"Config: {path}")
-    except ExpenseTrackerError as exc:
+    except SpendScopeError as exc:
         report.line(FAIL, "Config", str(exc))
         return False
 
@@ -41,7 +41,7 @@ def run_doctor(config: str | None = None, offline: bool = False) -> bool:
                         ("gspread", "the Google Sheets API source")):
         if importlib.util.find_spec(module) is None:
             report.line(WARN if module != "openpyxl" else FAIL, f"Python package {module} is missing ({why})",
-                        "pip install -r requirements.txt   (or: pip install sheets-expense-tracker)")
+                        "pip install -r requirements.txt   (or: pip install spendscope)")
 
     src = cfg["source"]
     kind = src.get("type", "gsheet_csv")
@@ -59,7 +59,7 @@ def run_doctor(config: str | None = None, offline: bool = False) -> bool:
                 report.line(WARN, f"{len(failures)} rows look like expenses but could not be parsed",
                             "A sync writes them to parse_failures.csv with the reason; check date_formats "
                             "and decimal_separator under [parsing].")
-        except ExpenseTrackerError as exc:
+        except SpendScopeError as exc:
             report.line(FAIL, "Reading the source", str(exc))
         except Exception as exc:  # network and Google errors: report, don't crash
             report.line(FAIL, "Reading the source", f"{type(exc).__name__}: {exc}")
@@ -68,7 +68,7 @@ def run_doctor(config: str | None = None, offline: bool = False) -> bool:
         statement_options(cfg)
         configured = rules(cfg)
         report.line(OK, "[statements] and [rules] settings" + (f" ({len(configured)} rules)" if configured else ""))
-    except ExpenseTrackerError as exc:
+    except SpendScopeError as exc:
         report.line(FAIL, "[statements] or [rules] settings", str(exc))
 
     check_database(report, database_path(cfg))
@@ -78,12 +78,12 @@ def run_doctor(config: str | None = None, offline: bool = False) -> bool:
 
 def check_source(report: Report, src: dict, kind: str, offline: bool) -> bool:
     """Check the source's settings and credentials; returns whether reading it is worth trying."""
-    from expense_tracker.sources import source_files, spreadsheet_id
+    from spendscope.sources import source_files, spreadsheet_id
 
     if kind == "file":
         try:
             files = source_files(src)
-        except ExpenseTrackerError as exc:
+        except SpendScopeError as exc:
             report.line(FAIL, "Source file", str(exc))
             return False
         report.line(OK, "Source files: " + ", ".join(p.name for p in files))
@@ -122,7 +122,7 @@ def check_source(report: Report, src: dict, kind: str, offline: bool) -> bool:
 
 
 def check_database(report: Report, db_path: Path) -> None:
-    from expense_tracker.labels import MISSING_SQL
+    from spendscope.labels import MISSING_SQL
 
     if not db_path.exists():
         report.line(WARN, f"No database yet at {db_path}", "Run sync to create it.")

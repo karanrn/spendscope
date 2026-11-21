@@ -1,4 +1,4 @@
-# Your config (start from `python -m expense_tracker init`; the example is expense_tracker/config.example.toml)
+# Your config (start from `python -m spendscope init`; the example is spendscope/config.example.toml)
 config.toml
 
 # OAuth credentials and cached user tokens
@@ -28,4 +28,4 @@ statements/
 *.xls
 *.xlsx
 *.xlsm
-!expense_tracker/templates/expenses-template.xlsx
+!spendscope/templates/expenses-template.xlsx

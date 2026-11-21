@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from expense_tracker import ExpenseTrackerError
+from spendscope import SpendScopeError
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS expenses (
@@ -96,8 +96,8 @@ def connect(db_path: Path, *, create: bool = False) -> sqlite3.Connection:
     if create:
         db_path.parent.mkdir(parents=True, exist_ok=True)
     elif not db_path.exists():
-        raise ExpenseTrackerError(
-            f"No database at {db_path}. Import your expenses first: python -m expense_tracker sync")
+        raise SpendScopeError(
+            f"No database at {db_path}. Import your expenses first: python -m spendscope sync")
     con = sqlite3.connect(db_path, timeout=5)
     con.execute("PRAGMA foreign_keys = ON")
     con.execute("PRAGMA busy_timeout = 5000")
@@ -113,12 +113,12 @@ def backup(db_path: Path, out: Path | None = None) -> Path:
     The default destination is backups/expenses-<timestamp>.db next to the database.
     """
     if not db_path.exists():
-        raise ExpenseTrackerError(f"No database at {db_path} to back up.")
+        raise SpendScopeError(f"No database at {db_path} to back up.")
     if out is None:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         out = db_path.parent / "backups" / f"{db_path.stem}-{stamp}{db_path.suffix or '.db'}"
     if out.exists():
-        raise ExpenseTrackerError(f"{out} already exists; choose another --out.")
+        raise SpendScopeError(f"{out} already exists; choose another --out.")
     out.parent.mkdir(parents=True, exist_ok=True)
     src = sqlite3.connect(db_path)
     dst = sqlite3.connect(out)

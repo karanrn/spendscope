@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------
-# Expense tracker config. `python -m expense_tracker init` writes a copy of this file;
-# edit it once, then run `python -m expense_tracker doctor` to check it.
+# SpendScope config. `python -m spendscope init` writes a copy of this file;
+# edit it once, then run `python -m spendscope doctor` to check it.
 # Relative paths below are relative to this file's folder.
 # ---------------------------------------------------------------
 
@@ -14,7 +14,7 @@ type = "file"
 
 # --- type = "file" ---
 # One file, or a pattern for several, such as one workbook per year.
-# Create one from the template with: python -m expense_tracker template
+# Create one from the template with: python -m spendscope template
 file_path = "Expenses *.xlsx"
 file_sheet = ""               # .xlsx: one worksheet only; empty = every worksheet
 
