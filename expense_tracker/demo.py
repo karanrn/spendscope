@@ -173,7 +173,7 @@ def write_statement(out: Path, end: date, rows: list[tuple]) -> Path:
         ds = d.strftime("%d/%m/%y")
         lines.append(f" {ds}  ,{narr:<39},{ds} ,{dr:>19.2f},{cr:>19.2f},{ref:<17},{bal:>15.2f}")
     path = out / STATEMENT_NAME.format(end)
-    path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+    path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8", newline="")  # CRLF as banks write it, on every OS
     return path
 
 

@@ -43,7 +43,7 @@ class Project:
 
     def __init__(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
+        self.root = Path(self._tmp.name).resolve()  # /var → /private/var on macOS, 8.3 names on Windows
         (self.root / "config.toml").write_text(CONFIG, encoding="utf-8")
         self.write_csv(CSV_ROWS)
 
@@ -104,7 +104,7 @@ def write_statements(root: Path) -> tuple[Path, Path]:
     """Write STATEMENT_TXT and STATEMENT_SHEET under root; returns (txt path, xlsx path)."""
     from openpyxl import Workbook
     txt = root / "statement.txt"
-    txt.write_text("\r\n".join(STATEMENT_TXT) + "\r\n", encoding="utf-8")
+    txt.write_text("\r\n".join(STATEMENT_TXT) + "\r\n", encoding="utf-8", newline="")  # keep CRLF as is on Windows
     wb = Workbook()
     for row in STATEMENT_SHEET:
         wb.active.append(row)
